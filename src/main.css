@@ -1,0 +1,77 @@
+@import "tailwindcss";
+
+@theme {
+  --color-app-bg: #F7F8FA;
+  --color-app-surface: #FFFFFF;
+  --color-app-sidebar: rgba(255, 255, 255, 0.72);
+  --color-app-hover: #F1F3F6;
+  --color-app-active: #E9EEF5;
+
+  --color-accent: #4F7DF3;
+  --color-accent-soft: rgba(79, 125, 243, 0.12);
+  --color-accent-hover: #3B6EEA;
+
+  --color-text-primary: #1C1D1F;
+  --color-text-secondary: #6B7280;
+  --color-text-muted: #9CA3AF;
+  --color-text-accent: #2563EB;
+
+  --color-border-subtle: rgba(0, 0, 0, 0.06);
+  --color-border-muted: rgba(0, 0, 0, 0.04);
+
+  --font-ui: "Inter", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-editor: "Inter", system-ui, sans-serif;
+
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 15px;
+  --text-md: 16px;
+  --text-lg: 18px;
+  --text-xl: 22px;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+
+:root {
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  min-width: 320px;
+  min-height: 100vh;
+  background-color: var(--color-app-bg);
+  color: var(--color-text-primary);
+}
+
+#root {
+  width: 100%;
+}
+
+/* Custom Scrollbar for macOS vibe */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-subtle);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}
