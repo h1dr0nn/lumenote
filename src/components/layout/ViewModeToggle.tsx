@@ -5,33 +5,34 @@ import { useStore } from '../../store/useStore';
 export const ViewModeToggle = () => {
     const { viewMode, setViewMode } = useStore();
 
-    return (
-        <div className="relative flex bg-app-hover p-1 rounded-md">
-            {/* Sliding background indicator */}
-            <motion.div
-                className="absolute top-1 bottom-1 bg-app-surface shadow-sm rounded-sm"
-                initial={false}
-                animate={{
-                    x: viewMode === 'edit' ? 0 : '100%',
-                    width: 'calc(50% - 2px)',
-                }}
-                transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-            />
+    const modes = [
+        { id: 'edit', icon: <Pencil size={14} /> },
+        { id: 'view', icon: <Eye size={14} /> },
+    ] as const;
 
-            <button
-                onClick={() => setViewMode('edit')}
-                className={`relative z-10 p-1.5 rounded-sm transition-colors ${viewMode === 'edit' ? 'text-accent' : 'text-text-muted hover:text-text-secondary'
-                    }`}
-            >
-                <Pencil size={14} />
-            </button>
-            <button
-                onClick={() => setViewMode('view')}
-                className={`relative z-10 p-1.5 rounded-sm transition-colors ${viewMode === 'view' ? 'text-accent' : 'text-text-muted hover:text-text-secondary'
-                    }`}
-            >
-                <Eye size={14} />
-            </button>
+    return (
+        <div className="relative flex bg-app-hover p-1 rounded-md gap-1">
+            {modes.map((mode) => (
+                <button
+                    key={mode.id}
+                    onClick={() => setViewMode(mode.id)}
+                    className={`relative p-1.5 rounded-sm transition-colors flex items-center justify-center min-w-[32px] ${viewMode === mode.id ? 'text-accent' : 'text-text-muted hover:text-text-secondary'
+                        }`}
+                >
+                    {viewMode === mode.id && (
+                        <motion.div
+                            layoutId="view-mode-indicator"
+                            className="absolute inset-0 bg-app-surface shadow-sm rounded-sm"
+                            transition={{
+                                type: 'spring',
+                                stiffness: 500,
+                                damping: 35,
+                            }}
+                        />
+                    )}
+                    <span className="relative z-10">{mode.icon}</span>
+                </button>
+            ))}
         </div>
     );
 };

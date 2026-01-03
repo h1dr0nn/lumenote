@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { Note, Folder, ViewMode } from '../types';
+import { arrayMove } from '@dnd-kit/sortable';
 
 interface AppState {
     notes: Note[];
@@ -7,7 +8,6 @@ interface AppState {
     activeNoteId: string | null;
     viewMode: ViewMode;
 
-    // Actions
     setNotes: (notes: Note[]) => void;
     setActiveNoteId: (id: string | null) => void;
     setViewMode: (mode: ViewMode) => void;
@@ -16,9 +16,14 @@ interface AppState {
     deleteNote: (id: string) => void;
     addFolder: (name: string, parentId?: string | null) => void;
     deleteFolder: (id: string) => void;
-    toggleFolder: (id: string) => void;
+    toggleFolder: (id: string, expanded?: boolean) => void;
     renameNote: (id: string, title: string) => void;
     renameFolder: (id: string, name: string) => void;
+
+    reorderNotes: (activeId: string, overId: string) => void;
+    reorderFolders: (activeId: string, overId: string) => void;
+    moveNoteToFolder: (noteId: string, folderId: string | null) => void;
+    moveFolderToFolder: (folderId: string, targetFolderId: string | null) => void;
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -26,7 +31,7 @@ export const useStore = create<AppState>((set) => ({
         {
             id: '1',
             title: 'Chào mừng bạn đến với Lumenote',
-            content: '# Chào mừng bạn đến với Lumenote\n\nĐây là ghi chú đầu tiên của bạn. Hãy thử viết gì đó nhé!\n\n- **Calm**: Giao diện tối giản giúp bạn tập trung.\n- **Modern**: Sử dụng công nghệ mới nhất.\n- **Markdown**: Định dạng văn bản nhanh chóng.',
+            content: '# Chào mừng bạn đến với Lumenote\n\nĐây là ghi chú đầu tiên của bạn.',
             folderId: null,
             createdAt: Date.now(),
             updatedAt: Date.now(),
@@ -83,9 +88,9 @@ export const useStore = create<AppState>((set) => ({
         notes: state.notes.map(n => n.folderId === id ? { ...n, folderId: null } : n),
     })),
 
-    toggleFolder: (id) => set((state) => ({
+    toggleFolder: (id, expanded) => set((state) => ({
         folders: state.folders.map(f =>
-            f.id === id ? { ...f, isExpanded: !f.isExpanded } : f
+            f.id === id ? { ...f, isExpanded: expanded !== undefined ? expanded : !f.isExpanded } : f
         )
     })),
 
@@ -96,4 +101,35 @@ export const useStore = create<AppState>((set) => ({
     renameFolder: (id, name) => set((state) => ({
         folders: state.folders.map(f => f.id === id ? { ...f, name } : f)
     })),
+
+    reorderNotes: (activeId, overId) => set((state) => {
+        const oldIndex = state.notes.findIndex((n) => n.id === activeId);
+        const newIndex = state.notes.findIndex((n) => n.id === overId);
+        if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return state;
+        return { notes: arrayMove(state.notes, oldIndex, newIndex) };
+    }),
+
+    reorderFolders: (activeId, overId) => set((state) => {
+        const oldIndex = state.folders.findIndex((f) => f.id === activeId);
+        const newIndex = state.folders.findIndex((f) => f.id === overId);
+        if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return state;
+        return { folders: arrayMove(state.folders, oldIndex, newIndex) };
+    }),
+
+    moveNoteToFolder: (noteId, folderId) => set((state) => ({
+        notes: state.notes.map((n) => n.id === noteId ? { ...n, folderId } : n)
+    })),
+
+    moveFolderToFolder: (folderId, targetFolderId) => set((state) => {
+        // Prevent moving folder into itself or its children
+        const isDescendant = (parentId: string, childId: string): boolean => {
+            const child = state.folders.find(f => f.id === childId);
+            if (!child || !child.parentId) return false;
+            if (child.parentId === parentId) return true;
+            return isDescendant(parentId, child.parentId);
+        };
+        if (folderId === targetFolderId) return state;
+        if (targetFolderId && isDescendant(folderId, targetFolderId)) return state;
+        return { folders: state.folders.map((f) => f.id === folderId ? { ...f, parentId: targetFolderId } : f) };
+    }),
 }));
