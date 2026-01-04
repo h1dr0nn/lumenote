@@ -15,7 +15,7 @@ interface ContextMenuProps extends ContextMenuType {
 export const ContextMenu = memo(({ x, y, type, itemId, onClose, onRename }: ContextMenuProps) => {
     const { 
         folders, notes, workspaces, deleteNote, deleteFolder, deleteWorkspace, 
-        addNote, addFolder, setActivePopup, setNoteColor, setFolderColor, language 
+        addNote, addFolder, addWorkspace, setNoteColor, setFolderColor, setWorkspaceColor, language 
     } = useStore();
     const ref = useRef<HTMLDivElement>(null);
     const [pos, setPos] = useState({ x, y });
@@ -68,6 +68,7 @@ export const ContextMenu = memo(({ x, y, type, itemId, onClose, onRename }: Cont
         if (!itemId) return;
         if (type === 'note') setNoteColor(itemId, color);
         else if (type === 'folder') setFolderColor(itemId, color);
+        else if (type === 'workspace') setWorkspaceColor(itemId, color);
         onClose();
     };
 
@@ -88,15 +89,20 @@ export const ContextMenu = memo(({ x, y, type, itemId, onClose, onRename }: Cont
         { icon: <Trash2 size={14} />, label: t('delete', language), action: () => { if (itemId) deleteFolder(itemId); onClose(); }, danger: true },
     ] : type === 'workspace' ? [
         { icon: <Edit3 size={14} />, label: t('rename', language), action: handleRename },
+        { icon: <Palette size={14} />, label: t('appearance', language), action: () => setShowColorPicker(!showColorPicker) },
         { icon: <Trash2 size={14} />, label: t('delete', language), action: () => { if (itemId) deleteWorkspace(itemId); onClose(); }, danger: true },
     ] : [
         { icon: <FileText size={14} />, label: t('new_note', language), action: () => { addNote(); onClose(); } },
         { icon: <FolderPlus size={14} />, label: t('new_folder', language), action: () => { addFolder(t('new_folder', language)); onClose(); } },
         { type: 'separator' },
-        { icon: <LayoutGrid size={14} />, label: t('new_workspace', language), action: () => { setActivePopup('workspace_create'); onClose(); } },
+        { icon: <LayoutGrid size={14} />, label: t('new_workspace', language), action: () => { addWorkspace(t('new_workspace', language)); onClose(); } },
     ];
 
-    const currentColor = itemId ? (type === 'note' ? notes.find(n => n.id === itemId)?.color : folders.find(f => f.id === itemId)?.color) : null;
+    const currentColor = itemId ? (
+        type === 'note' ? notes.find(n => n.id === itemId)?.color : 
+        type === 'folder' ? folders.find(f => f.id === itemId)?.color :
+        type === 'workspace' ? workspaces.find(w => w.id === itemId)?.color : null
+    ) : null;
 
     return (
         <motion.div ref={ref} 

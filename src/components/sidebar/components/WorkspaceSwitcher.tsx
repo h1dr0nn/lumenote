@@ -9,6 +9,7 @@ interface WorkspaceSwitcherProps {
     onEditChange: (val: string) => void;
     onEditSave: () => void;
     onEditCancel: () => void;
+    onNewWorkspaceEdit: (id: string, name: string) => void;
 }
 
 export const WorkspaceSwitcher = ({ 
@@ -17,12 +18,21 @@ export const WorkspaceSwitcher = ({
     editValue, 
     onEditChange, 
     onEditSave, 
-    onEditCancel 
+    onEditCancel,
+    onNewWorkspaceEdit
 }: WorkspaceSwitcherProps) => {
-    const { workspaces, activeWorkspaceId, setActiveWorkspaceId, setActivePopup, language } = useStore();
+    const { workspaces, activeWorkspaceId, setActiveWorkspaceId, addWorkspace, language } = useStore();
 
     const handleAddWorkspace = () => {
-        setActivePopup('workspace_create');
+        const defaultName = t('new_workspace', language);
+        addWorkspace(defaultName);
+        // Find the newly created workspace (it will be the last one and active)
+        setTimeout(() => {
+            const newWs = useStore.getState().workspaces[useStore.getState().workspaces.length - 1];
+            if (newWs) {
+                onNewWorkspaceEdit(newWs.id, newWs.name);
+            }
+        }, 0);
     };
 
     return (

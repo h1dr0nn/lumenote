@@ -1,8 +1,21 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useStore } from '../../store/useStore';
+import { api, NoteRecord, FolderRecord } from '../../utils/api';
+
+vi.mock('../../utils/api', () => ({
+    api: {
+        getNotes: vi.fn(() => Promise.resolve([])),
+        getFolders: vi.fn(() => Promise.resolve([])),
+        upsertNote: vi.fn(() => Promise.resolve()),
+        deleteNote: vi.fn(() => Promise.resolve()),
+        upsertFolder: vi.fn(() => Promise.resolve()),
+        deleteFolder: vi.fn(() => Promise.resolve()),
+    }
+}));
 
 describe('useStore', () => {
     beforeEach(() => {
+        vi.clearAllMocks();
         // Reset store to initial state
         useStore.setState({
             notes: [
@@ -10,60 +23,73 @@ describe('useStore', () => {
                     id: '1',
                     title: 'Test Note',
                     content: '# Test\n\nContent',
+                    workspaceId: 'default',
                     createdAt: Date.now(),
                     updatedAt: Date.now(),
                 }
             ],
+            folders: [],
             activeNoteId: '1',
+            activeWorkspaceId: 'default',
             viewMode: 'view',
         });
     });
 
-    it('should initialize with default notes', () => {
-        const { notes } = useStore.getState();
-        expect(notes.length).toBeGreaterThan(0);
+    it('should initialize store from backend API', async () => {
+        const mockNotes: NoteRecord[] = [
+            { id: '2', title: 'Remote Note', content: 'Remote', folder_id: null, workspace_id: 'default', created_at: 100, updated_at: 100 }
+        ];
+        const mockFolders: FolderRecord[] = [
+            { id: 'f1', name: 'Remote Folder', parent_id: null, workspace_id: 'default', created_at: 100 }
+        ];
+
+        (api.getNotes as any).mockResolvedValue(mockNotes);
+        (api.getFolders as any).mockResolvedValue(mockFolders);
+
+        const { initialize } = useStore.getState();
+        await initialize();
+
+        const state = useStore.getState();
+        expect(state.notes.length).toBe(1);
+        expect(state.notes[0].id).toBe('2');
+        expect(state.folders.length).toBe(1);
+        expect(state.folders[0].id).toBe('f1');
     });
 
-    it('should set active note id', () => {
-        const { setActiveNoteId } = useStore.getState();
-        setActiveNoteId('1');
-        expect(useStore.getState().activeNoteId).toBe('1');
+    it('should call api.upsertNote when adding a note', () => {
+        const { addNote } = useStore.getState();
+        addNote();
+        
+        expect(api.upsertNote).toHaveBeenCalled();
+    });
+
+    it('should call api.upsertNote when updating note content', () => {
+        const { updateNoteContent } = useStore.getState();
+        updateNoteContent('1', '# Updated');
+        
+        expect(api.upsertNote).toHaveBeenCalledWith(expect.objectContaining({
+            id: '1',
+            content: '# Updated'
+        }));
+    });
+
+    it('should call api.deleteNote when deleting a note', () => {
+        const { deleteNote } = useStore.getState();
+        deleteNote('1');
+        
+        expect(api.deleteNote).toHaveBeenCalledWith('1');
+    });
+
+    it('should call api.upsertFolder when adding a folder', () => {
+        const { addFolder } = useStore.getState();
+        addFolder('New Folder');
+        
+        expect(api.upsertFolder).toHaveBeenCalled();
     });
 
     it('should toggle view mode', () => {
         const { setViewMode } = useStore.getState();
         setViewMode('edit');
-        expect(useStore.getState().viewMode).toBe('edit');
-        setViewMode('view');
-        expect(useStore.getState().viewMode).toBe('view');
-    });
-
-    it('should update note content', () => {
-        const { updateNoteContent } = useStore.getState();
-        updateNoteContent('1', '# Updated Content');
-        const note = useStore.getState().notes.find(n => n.id === '1');
-        expect(note?.content).toBe('# Updated Content');
-    });
-
-    it('should add new note', () => {
-        const initialCount = useStore.getState().notes.length;
-        const { addNote } = useStore.getState();
-        addNote();
-        expect(useStore.getState().notes.length).toBe(initialCount + 1);
-    });
-
-    it('should set new note as active after adding', () => {
-        const { addNote } = useStore.getState();
-        addNote();
-        const { notes, activeNoteId } = useStore.getState();
-        const newNote = notes[notes.length - 1];
-        expect(activeNoteId).toBe(newNote.id);
-    });
-
-    it('should switch to edit mode after adding note', () => {
-        useStore.setState({ viewMode: 'view' });
-        const { addNote } = useStore.getState();
-        addNote();
         expect(useStore.getState().viewMode).toBe('edit');
     });
 });

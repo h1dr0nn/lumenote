@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { Note, Folder, ViewMode, Workspace } from '../types';
 import { arrayMove } from '@dnd-kit/sortable';
 import { EditorView } from '@codemirror/view';
+import { api } from '../utils/api';
 
 interface AppState {
     notes: Note[];
@@ -30,13 +31,14 @@ interface AppState {
     setFontSize: (size: number) => void;
     setLanguage: (lang: 'vi' | 'en') => void;
     updateNoteContent: (id: string, content: string) => void;
-    addNote: (folderId?: string | null) => void;
+    addNote: (folderId?: string | null) => string;
     deleteNote: (id: string) => void;
-    addFolder: (name: string, parentId?: string | null) => void;
+    addFolder: (name: string, parentId?: string | null) => string;
     deleteFolder: (id: string) => void;
-    addWorkspace: (name: string, color: string) => void;
+    addWorkspace: (name: string, color?: string) => void;
     deleteWorkspace: (id: string) => void;
     renameWorkspace: (id: string, name: string) => void;
+    setWorkspaceColor: (id: string, color: string | null) => void;
     toggleFolder: (id: string, expanded?: boolean) => void;
     renameNote: (id: string, title: string) => void;
     renameFolder: (id: string, name: string) => void;
@@ -47,20 +49,12 @@ interface AppState {
     reorderFolders: (activeId: string, overId: string) => void;
     moveNoteToFolder: (noteId: string, folderId: string | null) => void;
     moveFolderToFolder: (folderId: string, targetFolderId: string | null) => void;
+
+    initialize: () => Promise<void>;
 }
 
-export const useStore = create<AppState>((set) => ({
-    notes: [
-        {
-            id: '1',
-            title: 'Welcome to Lumenote',
-            content: '# Welcome to Lumenote\n\nThis is your first note.',
-            folderId: null,
-            workspaceId: 'default',
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-        }
-    ],
+export const useStore = create<AppState>((set, get) => ({
+    notes: [],
     folders: [],
     workspaces: [
         {
@@ -70,7 +64,7 @@ export const useStore = create<AppState>((set) => ({
             createdAt: Date.now(),
         }
     ],
-    activeNoteId: '1',
+    activeNoteId: null,
     activeWorkspaceId: 'default',
     viewMode: 'view',
     editorView: null,
@@ -79,6 +73,39 @@ export const useStore = create<AppState>((set) => ({
     fontPreset: 'sans',
     fontSize: 16,
     language: 'en',
+
+    initialize: async () => {
+        try {
+            const [notesRecords, foldersRecords] = await Promise.all([
+                api.getNotes(),
+                api.getFolders()
+            ]);
+
+            const notes: Note[] = notesRecords.map(r => ({
+                id: r.id,
+                title: r.title,
+                content: r.content,
+                folderId: r.folder_id,
+                workspaceId: r.workspace_id,
+                createdAt: r.created_at,
+                updatedAt: r.updated_at,
+            }));
+
+            const folders: Folder[] = foldersRecords.map(r => ({
+                id: r.id,
+                name: r.name,
+                parentId: r.parent_id,
+                workspaceId: r.workspace_id,
+                createdAt: r.created_at,
+                color: r.color || undefined,
+                isExpanded: true, // Default expanded for now
+            }));
+
+            set({ notes, folders });
+        } catch (error) {
+            console.error("Failed to initialize store from backend:", error);
+        }
+    },
 
     setNotes: (notes) => set({ notes }),
     setActiveNoteId: (id) => set({ activeNoteId: id }),
@@ -91,71 +118,129 @@ export const useStore = create<AppState>((set) => ({
     setFontSize: (fontSize) => set({ fontSize }),
     setLanguage: (language) => set({ language }),
 
-    updateNoteContent: (id, content) => set((state) => ({
-        notes: state.notes.map((note) =>
-            note.id === id ? { ...note, content, updatedAt: Date.now() } : note
-        )
-    })),
+    updateNoteContent: (id, content) => {
+        set((state) => {
+            const notes = state.notes.map((note) =>
+                note.id === id ? { ...note, content, updatedAt: Date.now() } : note
+            );
+            const updatedNote = notes.find(n => n.id === id);
+            if (updatedNote) {
+                api.upsertNote({
+                    id: updatedNote.id,
+                    title: updatedNote.title,
+                    content: updatedNote.content,
+                    folder_id: updatedNote.folderId || null,
+                    workspace_id: updatedNote.workspaceId,
+                    created_at: updatedNote.createdAt,
+                    updated_at: updatedNote.updatedAt,
+                });
+            }
+            return { notes };
+        });
+    },
 
     addNote: (folderId = null) => {
-        set((state) => {
-            const newNote: Note = {
-                id: Math.random().toString(36).substring(2, 9),
-                title: 'New Note',
-                content: '',
-                folderId,
-                workspaceId: state.activeWorkspaceId,
-                createdAt: Date.now(),
-                updatedAt: Date.now(),
-            };
-            return {
-                notes: [...state.notes, newNote],
-                activeNoteId: newNote.id,
-                viewMode: 'edit'
-            };
+        const state = get();
+        const newNote: Note = {
+            id: Math.random().toString(36).substring(2, 9),
+            title: 'New Note',
+            content: '',
+            folderId,
+            workspaceId: state.activeWorkspaceId,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+        };
+
+        set((state) => ({
+            notes: [...state.notes, newNote],
+            activeNoteId: newNote.id,
+            viewMode: 'edit'
+        }));
+
+        api.upsertNote({
+            id: newNote.id,
+            title: newNote.title,
+            content: newNote.content,
+            folder_id: newNote.folderId || null,
+            workspace_id: newNote.workspaceId,
+            created_at: newNote.createdAt,
+            updated_at: newNote.updatedAt,
         });
+        
+        return newNote.id;
     },
 
-    deleteNote: (id) => set((state) => ({
-        notes: state.notes.filter(n => n.id !== id),
-        activeNoteId: state.activeNoteId === id ? null : state.activeNoteId,
-    })),
+    deleteNote: (id) => {
+        set((state) => ({
+            notes: state.notes.filter(n => n.id !== id),
+            activeNoteId: state.activeNoteId === id ? null : state.activeNoteId,
+        }));
+        api.deleteNote(id);
+    },
 
     addFolder: (name, parentId = null) => {
-        set((state) => {
-            const newFolder: Folder = {
-                id: Math.random().toString(36).substring(2, 9),
-                name,
-                parentId,
-                workspaceId: state.activeWorkspaceId,
-                isExpanded: true,
-                createdAt: Date.now(),
-            };
-            return { folders: [...state.folders, newFolder] };
+        const state = get();
+        const newFolder: Folder = {
+            id: Math.random().toString(36).substring(2, 9),
+            name,
+            parentId,
+            workspaceId: state.activeWorkspaceId,
+            isExpanded: true,
+            createdAt: Date.now(),
+        };
+
+        set((state) => ({ folders: [...state.folders, newFolder] }));
+
+        api.upsertFolder({
+            id: newFolder.id,
+            name: newFolder.name,
+            parent_id: newFolder.parentId || null,
+            workspace_id: newFolder.workspaceId,
+            created_at: newFolder.createdAt,
+            color: newFolder.color || null,
         });
+        
+        return newFolder.id;
     },
 
-    deleteFolder: (id) => set((state) => ({
-        folders: state.folders.filter(f => f.id !== id),
-        notes: state.notes.map(n => n.folderId === id ? { ...n, folderId: null } : n),
-    })),
+    deleteFolder: (id) => {
+        set((state) => ({
+            folders: state.folders.filter(f => f.id !== id),
+            notes: state.notes.map(n => n.folderId === id ? { ...n, folderId: null } : n),
+        }));
+        api.deleteFolder(id);
+    },
 
     addWorkspace: (name, color) => {
+        const WORKSPACE_COLORS = ['#4F7DF3', '#E94F37', '#3CB371', '#FFA500', '#9370DB', '#FF69B4', '#20B2AA', '#778899'];
+        const usedColors = get().workspaces.map(w => w.color);
+        const availableColors = WORKSPACE_COLORS.filter(c => !usedColors.includes(c));
+        const randomColor = color || (availableColors.length > 0 
+            ? availableColors[Math.floor(Math.random() * availableColors.length)]
+            : WORKSPACE_COLORS[Math.floor(Math.random() * WORKSPACE_COLORS.length)]);
+        
         const newWorkspace: Workspace = {
             id: Math.random().toString(36).substring(2, 9),
             name,
-            color,
+            color: randomColor,
             createdAt: Date.now(),
         };
         set((state) => ({
             workspaces: [...state.workspaces, newWorkspace],
             activeWorkspaceId: newWorkspace.id,
-            activeNoteId: null, // Clear active note when switching to new workspace
+            activeNoteId: null,
         }));
+        return newWorkspace.id;
     },
 
+    setWorkspaceColor: (id, color) => set((state) => ({
+        workspaces: state.workspaces.map(w => 
+            w.id === id ? { ...w, color: color || '#4F7DF3' } : w
+        ),
+    })),
+
     deleteWorkspace: (id) => set((state) => {
-        if (state.workspaces.length <= 1) return state; // Prevent deleting last workspace
+        if (state.workspaces.length <= 1) return state;
         const newWorkspaces = state.workspaces.filter(w => w.id !== id);
         const isActiveDeleting = state.activeWorkspaceId === id;
         const newActiveId = isActiveDeleting ? newWorkspaces[0].id : state.activeWorkspaceId;
@@ -179,19 +264,79 @@ export const useStore = create<AppState>((set) => ({
         )
     })),
 
-    renameNote: (id, title) => set((state) => ({
-        notes: state.notes.map(n => n.id === id ? { ...n, title } : n)
-    })),
+    renameNote: (id, title) => {
+        set((state) => {
+            const notes = state.notes.map(n => n.id === id ? { ...n, title } : n);
+            const updatedNote = notes.find(n => n.id === id);
+            if (updatedNote) {
+                api.upsertNote({
+                    id: updatedNote.id,
+                    title: updatedNote.title,
+                    content: updatedNote.content,
+                    folder_id: updatedNote.folderId || null,
+                    workspace_id: updatedNote.workspaceId,
+                    created_at: updatedNote.createdAt,
+                    updated_at: updatedNote.updatedAt,
+                });
+            }
+            return { notes };
+        });
+    },
 
-    renameFolder: (id: string, name: string) => set((state) => ({
-        folders: state.folders.map(f => f.id === id ? { ...f, name } : f)
-    })),
-    setNoteColor: (id, color) => set((state) => ({
-        notes: state.notes.map(n => n.id === id ? { ...n, color: color || undefined } : n)
-    })),
-    setFolderColor: (id, color) => set((state) => ({
-        folders: state.folders.map(f => f.id === id ? { ...f, color: color || undefined } : f)
-    })),
+    renameFolder: (id: string, name: string) => {
+        set((state) => {
+            const folders = state.folders.map(f => f.id === id ? { ...f, name } : f);
+            const updatedFolder = folders.find(f => f.id === id);
+            if (updatedFolder) {
+                api.upsertFolder({
+                    id: updatedFolder.id,
+                    name: updatedFolder.name,
+                    parent_id: updatedFolder.parentId || null,
+                    workspace_id: updatedFolder.workspaceId,
+                    created_at: updatedFolder.createdAt,
+                    color: updatedFolder.color || null,
+                });
+            }
+            return { folders };
+        });
+    },
+
+    setNoteColor: (id, color) => {
+        set((state) => {
+            const notes = state.notes.map(n => n.id === id ? { ...n, color: color || undefined } : n);
+            const updatedNote = notes.find(n => n.id === id);
+            if (updatedNote) {
+                api.upsertNote({
+                    id: updatedNote.id,
+                    title: updatedNote.title,
+                    content: updatedNote.content,
+                    folder_id: updatedNote.folderId || null,
+                    workspace_id: updatedNote.workspaceId,
+                    created_at: updatedNote.createdAt,
+                    updated_at: updatedNote.updatedAt,
+                });
+            }
+            return { notes };
+        });
+    },
+
+    setFolderColor: (id, color) => {
+        set((state) => {
+            const folders = state.folders.map(f => f.id === id ? { ...f, color: color || undefined } : f);
+            const updatedFolder = folders.find(f => f.id === id);
+            if (updatedFolder) {
+                api.upsertFolder({
+                    id: updatedFolder.id,
+                    name: updatedFolder.name,
+                    parent_id: updatedFolder.parentId || null,
+                    workspace_id: updatedFolder.workspaceId,
+                    created_at: updatedFolder.createdAt,
+                    color: updatedFolder.color || null,
+                });
+            }
+            return { folders };
+        });
+    },
 
     reorderNotes: (activeId, overId) => set((state) => {
         const oldIndex = state.notes.findIndex((n) => n.id === activeId);
@@ -207,12 +352,26 @@ export const useStore = create<AppState>((set) => ({
         return { folders: arrayMove(state.folders, oldIndex, newIndex) };
     }),
 
-    moveNoteToFolder: (noteId, folderId) => set((state) => ({
-        notes: state.notes.map((n) => n.id === noteId ? { ...n, folderId } : n)
-    })),
+    moveNoteToFolder: (noteId, folderId) => {
+        set((state) => {
+            const notes = state.notes.map((n) => n.id === noteId ? { ...n, folderId } : n);
+            const updatedNote = notes.find(n => n.id === noteId);
+            if (updatedNote) {
+                api.upsertNote({
+                    id: updatedNote.id,
+                    title: updatedNote.title,
+                    content: updatedNote.content,
+                    folder_id: updatedNote.folderId || null,
+                    workspace_id: updatedNote.workspaceId,
+                    created_at: updatedNote.createdAt,
+                    updated_at: updatedNote.updatedAt,
+                });
+            }
+            return { notes };
+        });
+    },
 
     moveFolderToFolder: (folderId, targetFolderId) => set((state) => {
-        // Prevent moving folder into itself or its children
         const isDescendant = (parentId: string, childId: string): boolean => {
             const child = state.folders.find(f => f.id === childId);
             if (!child || !child.parentId) return false;
@@ -221,6 +380,19 @@ export const useStore = create<AppState>((set) => ({
         };
         if (folderId === targetFolderId) return state;
         if (targetFolderId && isDescendant(folderId, targetFolderId)) return state;
-        return { folders: state.folders.map((f) => f.id === folderId ? { ...f, parentId: targetFolderId } : f) };
+        
+        const folders = state.folders.map((f) => f.id === folderId ? { ...f, parentId: targetFolderId } : f);
+        const updatedFolder = folders.find(f => f.id === folderId);
+        if (updatedFolder) {
+            api.upsertFolder({
+                id: updatedFolder.id,
+                name: updatedFolder.name,
+                parent_id: updatedFolder.parentId || null,
+                workspace_id: updatedFolder.workspaceId,
+                created_at: updatedFolder.createdAt,
+                color: updatedFolder.color || null,
+            });
+        }
+        return { folders };
     }),
 }));

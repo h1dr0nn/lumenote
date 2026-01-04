@@ -66,6 +66,14 @@ export const translations = {
     cancel: "Hủy",
     create: "Tạo",
     workspace_color: "Màu chủ đề",
+    alerts: "Thông báo",
+    alert_note: "Lưu ý",
+    alert_tip: "Mẹo",
+    alert_important: "Quan trọng",
+    alert_warning: "Cảnh báo",
+    alert_caution: "Cẩn trọng",
+    start_writing: "Bắt đầu viết...",
+    editor_placeholder: "Bắt đầu viết điều gì đó tuyệt vời...",
   },
   en: {
     settings: "Settings",
@@ -132,6 +140,14 @@ export const translations = {
     cancel: "Cancel",
     create: "Create",
     workspace_color: "Theme Color",
+    alerts: "Alerts",
+    alert_note: "Note",
+    alert_tip: "Tip",
+    alert_important: "Important",
+    alert_warning: "Warning",
+    alert_caution: "Caution",
+    start_writing: "Start writing...",
+    editor_placeholder: "Start writing something awesome...",
   }
 };
 

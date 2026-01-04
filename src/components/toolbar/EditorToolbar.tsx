@@ -1,15 +1,17 @@
 import { useState, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useStore } from "../../store/useStore";
-import { Bold, Italic, Heading1, Heading2, Heading3, List, ListOrdered, CheckSquare, Link, Code, Terminal, Table } from "lucide-react";
+import { Bold, Italic, Heading1, Heading2, Heading3, List, ListOrdered, CheckSquare, Link, Code, Terminal, Table, Zap, Info, Lightbulb, AlertTriangle, AlertCircle } from "lucide-react";
 import { EditorSelection, SelectionRange } from "@codemirror/state";
 import { t } from "../../utils/i18n";
 
 export const EditorToolbar = () => {
     const { editorView, language } = useStore();
     const [showGrid, setShowGrid] = useState(false);
+    const [showAlerts, setShowAlerts] = useState(false);
     const [hoveredSize, setHoveredSize] = useState({ rows: 3, cols: 3 });
     const timerRef = useRef<number | null>(null);
+    const alertTimerRef = useRef<number | null>(null);
 
     if (!editorView) return null;
 
@@ -158,12 +160,24 @@ export const EditorToolbar = () => {
 
     const handleMouseEnter = () => {
         if (timerRef.current) clearTimeout(timerRef.current);
+        setHoveredSize({ rows: 1, cols: 1 }); // Start from 1x1 for better feedback
         setShowGrid(true);
     };
 
     const handleMouseLeave = () => {
         timerRef.current = setTimeout(() => {
             setShowGrid(false);
+        }, 300) as unknown as number;
+    };
+
+    const handleAlertMouseEnter = () => {
+        if (alertTimerRef.current) clearTimeout(alertTimerRef.current);
+        setShowAlerts(true);
+    };
+
+    const handleAlertMouseLeave = () => {
+        alertTimerRef.current = setTimeout(() => {
+            setShowAlerts(false);
         }, 300) as unknown as number;
     };
 
@@ -185,25 +199,29 @@ export const EditorToolbar = () => {
             <ToolbarButton icon={<CheckSquare size={16} />} onClick={() => applyLineFormat('- [ ] ')} title={t('checkbox', language)} />
             
             <div 
-                className="relative"
+                className="relative h-full flex items-center px-1"
                 onMouseEnter={handleMouseEnter}
                 onMouseLeave={handleMouseLeave}
             >
-                <ToolbarButton icon={<Table size={16} />} onClick={() => insertTable(2, 2)} title={t('table', language)} />
+                <ToolbarButton icon={<Table size={16} />} onClick={() => insertTable(2, 2)} />
                 
-                <AnimatePresence>
-                    {showGrid && (
-                        <motion.div 
-                            initial={{ opacity: 0, scale: 0.9, y: -10 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.9, y: -10 }}
-                            transition={{ duration: 0.15, ease: "easeOut" }}
-                            className="absolute top-full left-0 mt-1 z-50 bg-app-surface border border-border-subtle shadow-md p-2.5 rounded-md origin-top-left w-max"
+                {showGrid && (
+                    <div 
+                        className="absolute top-full left-0 z-[100] pt-1 origin-top-left"
+                    >
+                        <div 
+                            className="bg-app-surface border border-border-subtle shadow-2xl p-3 rounded-md w-max overflow-hidden animate-in fade-in zoom-in-95 duration-100"
+                            style={{ boxShadow: '0 20px 50px -12px rgba(0,0,0,0.5)' }}
                         >
-                            <div className="text-[10px] text-text-muted mb-2 font-medium uppercase tracking-wider">
-                                {hoveredSize.cols} x {hoveredSize.rows} {t('table', language)}
+                            <div className="flex items-center justify-between mb-2.5 px-0.5">
+                                <span className="text-[11px] font-bold text-accent bg-accent-soft px-1.5 py-0.5 rounded-sm">
+                                    {hoveredSize.cols} x {hoveredSize.rows}
+                                </span>
+                                <span className="text-[10px] text-text-muted uppercase tracking-wider font-semibold">
+                                    {t('table', language)}
+                                </span>
                             </div>
-                            <div className="grid grid-cols-8 gap-1">
+                            <div className="grid grid-cols-8 gap-1.5 p-0.5">
                                 {Array.from({ length: 8 * 8 }).map((_, i) => {
                                     const r = Math.floor(i / 8) + 1;
                                     const c = (i % 8) + 1;
@@ -211,41 +229,103 @@ export const EditorToolbar = () => {
                                     return (
                                         <div
                                             key={i}
-                                            onMouseEnter={() => setHoveredSize({ rows: r, cols: c })}
-                                            onClick={() => insertTable(r, c)}
-                                            className={`w-5 h-5 rounded-sm border transition-colors cursor-pointer ${
-                                                isActive 
-                                                    ? "bg-accent border-accent shadow-sm" 
-                                                    : "bg-app-bg border-border-subtle hover:border-text-muted"
+                                            onMouseEnter={(e) => { e.stopPropagation(); setHoveredSize({ rows: r, cols: c }); }}
+                                            onClick={(e) => { e.stopPropagation(); insertTable(r, c); }}
+                                            style={{
+                                                backgroundColor: isActive ? 'var(--color-accent)' : 'var(--color-app-hover)',
+                                                borderColor: isActive ? 'var(--color-accent)' : 'var(--color-border-subtle)'
+                                            }}
+                                            className={`w-[18px] h-[18px] rounded-[3px] border transition-all cursor-pointer ${
+                                                isActive ? "shadow-[0_0_8px_rgba(79,125,243,0.4)] scale-105 z-10" : "hover:border-text-muted"
                                             }`}
                                         />
                                     );
                                 })}
                             </div>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
+                        </div>
+                    </div>
+                )}
             </div>
 
-            <div className="w-px h-5 bg-border-subtle mx-2" />
+            <div className="w-px h-5 bg-border-subtle mx-1" />
 
             <ToolbarButton icon={<Link size={16} />} onClick={insertLink} title={t('link', language)} />
             <ToolbarButton icon={<Code size={16} />} onClick={() => wrapSelection('`', '`')} title={t('inline_code', language)} />
             <ToolbarButton icon={<Terminal size={16} />} onClick={insertCodeBlock} title={t('code_block', language)} />
+            
+            <div className="w-px h-5 bg-border-subtle mx-1" />
+
+            <div 
+                className="relative h-full flex items-center px-1"
+                onMouseEnter={handleAlertMouseEnter}
+                onMouseLeave={handleAlertMouseLeave}
+            >
+                <ToolbarButton icon={<Zap size={16} />} onClick={() => applyLineFormat('> [!NOTE]\n> ')} />
+                
+                <AnimatePresence>
+                    {showAlerts && (
+                        <motion.div 
+                            initial={{ opacity: 0, scale: 0.9, y: -10 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.9, y: -10 }}
+                            transition={{ duration: 0.15, ease: "easeOut" }}
+                            className="absolute top-full right-0 mt-1 z-50 bg-app-surface border border-border-subtle shadow-md p-1 rounded-md origin-top-right w-48"
+                        >
+                            <AlertOption 
+                                icon={<Info size={14} className="text-blue-500" />} 
+                                label={t('alert_note', language)} 
+                                onClick={() => { applyLineFormat('> [!NOTE]\n> '); setShowAlerts(false); }} 
+                            />
+                            <AlertOption 
+                                icon={<Lightbulb size={14} className="text-green-500" />} 
+                                label={t('alert_tip', language)} 
+                                onClick={() => { applyLineFormat('> [!TIP]\n> '); setShowAlerts(false); }} 
+                            />
+                            <AlertOption 
+                                icon={<Zap size={14} className="text-purple-500" />} 
+                                label={t('alert_important', language)} 
+                                onClick={() => { applyLineFormat('> [!IMPORTANT]\n> '); setShowAlerts(false); }} 
+                            />
+                            <AlertOption 
+                                icon={<AlertTriangle size={14} className="text-yellow-500" />} 
+                                label={t('alert_warning', language)} 
+                                onClick={() => { applyLineFormat('> [!WARNING]\n> '); setShowAlerts(false); }} 
+                            />
+                            <AlertOption 
+                                icon={<AlertCircle size={14} className="text-red-500" />} 
+                                label={t('alert_caution', language)} 
+                                onClick={() => { applyLineFormat('> [!CAUTION]\n> '); setShowAlerts(false); }} 
+                            />
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+            </div>
         </div>
     );
 };
 
+const AlertOption = ({ icon, label, onClick }: { icon: React.ReactNode, label: string, onClick: () => void }) => (
+    <button
+        onClick={onClick}
+        className="w-full flex items-center gap-3 px-3 py-2 text-xs text-text-secondary hover:text-text-primary hover:bg-app-hover rounded-sm transition-colors"
+    >
+        {icon}
+        <span>{label}</span>
+    </button>
+);
+
 interface ToolbarButtonProps {
     icon: React.ReactNode;
     onClick: () => void;
-    title: string;
+    title?: string;
+    [key: string]: any;
 }
 
-const ToolbarButton = ({ icon, onClick, title }: ToolbarButtonProps) => (
+const ToolbarButton = ({ icon, onClick, title, ...props }: ToolbarButtonProps) => (
     <button
         onClick={onClick}
         title={title}
+        {...props}
         className="p-1.5 rounded-sm text-text-secondary hover:text-text-primary hover:bg-app-hover transition-colors"
     >
         {icon}

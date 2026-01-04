@@ -8,7 +8,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Settings as SettingsIcon, Share2 } from "lucide-react";
 import { SharePopup } from "./components/popups/SharePopup";
 import { SettingsPopup } from "./components/popups/SettingsPopup";
-import { WorkspaceModal } from './components/popups/WorkspaceModal';
 import { useEffect } from "react";
 
 function App() {
@@ -121,7 +120,7 @@ function App() {
               animate={{ opacity: 1, height: 40 }}
               exit={{ opacity: 0, height: 0 }}
               transition={{ duration: 0.2, ease: "easeInOut" }}
-              className="border-b border-border-muted bg-app-surface overflow-hidden"
+              className="border-b border-border-muted bg-app-surface"
             >
               <EditorToolbar />
             </motion.div>
@@ -130,7 +129,7 @@ function App() {
 
         {/* Content Area */}
         <div className="flex-1 overflow-hidden w-full flex">
-          <div className="w-full max-w-[900px] h-full">
+          <div className="w-full h-full">
             <AnimatePresence mode="wait" initial={false}>
               {activeNoteId ? (
                 <motion.div
@@ -171,7 +170,6 @@ function App() {
         {/* Popups */}
         <SharePopup />
         <SettingsPopup />
-        <WorkspaceModal />
       </main>
     </div>
   );

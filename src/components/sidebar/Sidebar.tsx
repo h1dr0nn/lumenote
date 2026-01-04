@@ -44,9 +44,9 @@ export const Sidebar = () => {
         activeWorkspaceId,
         workspaces,
         setActiveNoteId, 
-        setActivePopup,
         addNote, 
-        addFolder, 
+        addFolder,
+        addWorkspace,
         toggleFolder, 
         reorderNotes, 
         reorderFolders, 
@@ -357,9 +357,23 @@ export const Sidebar = () => {
                     <DropdownMenu 
                         isOpen={dropdownOpen} 
                         onClose={() => setDropdownOpen(false)} 
-                        onNewFile={() => addNote()} 
-                        onNewFolder={() => addFolder(t('new_folder', language))}
-                        onNewWorkspace={() => setActivePopup('workspace_create')}
+                        onNewFile={() => {
+                            const newId = addNote();
+                            if (newId) setTimeout(() => handleRenameStart(newId, 'New Note'), 0);
+                        }} 
+                        onNewFolder={() => {
+                            const defaultName = t('new_folder', language);
+                            const newId = addFolder(defaultName);
+                            if (newId) setTimeout(() => handleRenameStart(newId, defaultName), 0);
+                        }}
+                        onNewWorkspace={() => {
+                            const defaultName = t('new_workspace', language);
+                            addWorkspace(defaultName);
+                            setTimeout(() => {
+                                const newWs = workspaces[workspaces.length - 1];
+                                if (newWs) handleRenameStart(newWs.id, newWs.name);
+                            }, 50);
+                        }}
                     />
                 </div>
             </div>
@@ -429,6 +443,7 @@ export const Sidebar = () => {
                 onEditChange={setEditValue}
                 onEditSave={handleRenameSave}
                 onEditCancel={handleRenameCancel}
+                onNewWorkspaceEdit={(id, name) => handleRenameStart(id, name)}
             />
                 <div className="flex justify-between items-center px-1">
                     <span className="text-[10px] text-text-muted font-medium uppercase tracking-wider">

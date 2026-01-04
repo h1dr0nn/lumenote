@@ -4,9 +4,24 @@ import App from "./App";
 import { Toaster } from "sonner";
 import "./main.css";
 
+import { useEffect } from "react";
+import { useStore } from "./store/useStore";
+
+const AppInitializer = ({ children }: { children: React.ReactNode }) => {
+  const initialize = useStore((state) => state.initialize);
+  
+  useEffect(() => {
+    initialize();
+  }, [initialize]);
+
+  return <>{children}</>;
+};
+
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    <App />
+    <AppInitializer>
+      <App />
+    </AppInitializer>
     <Toaster
       position="bottom-right"
       toastOptions={{
