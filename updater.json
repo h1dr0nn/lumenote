@@ -1,7 +1,7 @@
 {
-  "version": "0.1.0",
+  "version": "0.0.1",
   "notes": "Initial release",
-  "pub_date": "2024-01-01T00:00:00Z",
+  "pub_date": "2026-01-04T20:29:26.492Z",
   "platforms": {
     "darwin-aarch64": {
       "signature": "",
@@ -13,11 +13,11 @@
     },
     "linux-x86_64": {
       "signature": "",
-      "url": ""
+      "url": "https://github.com/h1dr0nn/lumenote/releases/download/develop-v0.0.1/lumenote-0.0.1-linux-x64-updater.AppImage.tar.gz"
     },
     "windows-x86_64": {
       "signature": "",
-      "url": ""
+      "url": "https://github.com/h1dr0nn/lumenote/releases/download/develop-v0.0.1/lumenote-0.0.1-windows-x64-updater.msi.zip"
     }
   }
 }
