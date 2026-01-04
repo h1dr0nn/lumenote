@@ -60,6 +60,12 @@ export const translations = {
     link: "Liên kết",
     inline_code: "Code dòng",
     code_block: "Khối code",
+    new_workspace: "Không gian mới",
+    workspace_name: "Tên không gian chính",
+    workspace: "Không gian",
+    cancel: "Hủy",
+    create: "Tạo",
+    workspace_color: "Màu chủ đề",
   },
   en: {
     settings: "Settings",
@@ -120,10 +126,18 @@ export const translations = {
     link: "Link",
     inline_code: "Inline Code",
     code_block: "Code Block",
+    new_workspace: "New Workspace",
+    workspace_name: "Workspace Name",
+    workspace: "Workspace",
+    cancel: "Cancel",
+    create: "Create",
+    workspace_color: "Theme Color",
   }
 };
 
-export const t = (key: keyof typeof translations.vi, lang: Language, params?: Record<string, any>) => {
+export type I18nKey = keyof typeof translations.vi;
+
+export const t = (key: I18nKey, lang: Language, params?: Record<string, any>) => {
   let text = translations[lang][key] || key;
   if (params) {
     Object.entries(params).forEach(([k, v]) => {

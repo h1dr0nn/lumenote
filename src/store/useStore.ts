@@ -1,15 +1,17 @@
 import { create } from 'zustand';
-import { Note, Folder, ViewMode } from '../types';
+import { Note, Folder, ViewMode, Workspace } from '../types';
 import { arrayMove } from '@dnd-kit/sortable';
 import { EditorView } from '@codemirror/view';
 
 interface AppState {
     notes: Note[];
     folders: Folder[];
+    workspaces: Workspace[];
     activeNoteId: string | null;
+    activeWorkspaceId: string;
     viewMode: ViewMode;
     editorView: EditorView | null;
-    activePopup: 'share' | 'settings' | null;
+    activePopup: 'share' | 'settings' | 'workspace_create' | null;
 
     // Settings
     theme: 'light' | 'dark' | 'system';
@@ -19,9 +21,10 @@ interface AppState {
 
     setNotes: (notes: Note[]) => void;
     setActiveNoteId: (id: string | null) => void;
+    setActiveWorkspaceId: (id: string) => void;
     setViewMode: (mode: ViewMode) => void;
     setEditorView: (view: EditorView | null) => void;
-    setActivePopup: (popup: 'share' | 'settings' | null) => void;
+    setActivePopup: (popup: 'share' | 'settings' | 'workspace_create' | null) => void;
     setTheme: (theme: 'light' | 'dark' | 'system') => void;
     setFontPreset: (preset: 'sans' | 'serif' | 'mono') => void;
     setFontSize: (size: number) => void;
@@ -31,6 +34,9 @@ interface AppState {
     deleteNote: (id: string) => void;
     addFolder: (name: string, parentId?: string | null) => void;
     deleteFolder: (id: string) => void;
+    addWorkspace: (name: string, color: string) => void;
+    deleteWorkspace: (id: string) => void;
+    renameWorkspace: (id: string, name: string) => void;
     toggleFolder: (id: string, expanded?: boolean) => void;
     renameNote: (id: string, title: string) => void;
     renameFolder: (id: string, name: string) => void;
@@ -50,12 +56,22 @@ export const useStore = create<AppState>((set) => ({
             title: 'Welcome to Lumenote',
             content: '# Welcome to Lumenote\n\nThis is your first note.',
             folderId: null,
+            workspaceId: 'default',
             createdAt: Date.now(),
             updatedAt: Date.now(),
         }
     ],
     folders: [],
+    workspaces: [
+        {
+            id: 'default',
+            name: 'Lumenote',
+            color: '#4F7DF3',
+            createdAt: Date.now(),
+        }
+    ],
     activeNoteId: '1',
+    activeWorkspaceId: 'default',
     viewMode: 'view',
     editorView: null,
     activePopup: null,
@@ -66,6 +82,7 @@ export const useStore = create<AppState>((set) => ({
 
     setNotes: (notes) => set({ notes }),
     setActiveNoteId: (id) => set({ activeNoteId: id }),
+    setActiveWorkspaceId: (id) => set({ activeWorkspaceId: id }),
     setViewMode: (mode) => set({ viewMode: mode }),
     setEditorView: (view) => set({ editorView: view }),
     setActivePopup: (popup) => set({ activePopup: popup }),
@@ -81,19 +98,22 @@ export const useStore = create<AppState>((set) => ({
     })),
 
     addNote: (folderId = null) => {
-        const newNote: Note = {
-            id: Math.random().toString(36).substring(2, 9),
-            title: 'New Note',
-            content: '',
-            folderId,
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-        };
-        set((state) => ({
-            notes: [...state.notes, newNote],
-            activeNoteId: newNote.id,
-            viewMode: 'edit'
-        }));
+        set((state) => {
+            const newNote: Note = {
+                id: Math.random().toString(36).substring(2, 9),
+                title: 'New Note',
+                content: '',
+                folderId,
+                workspaceId: state.activeWorkspaceId,
+                createdAt: Date.now(),
+                updatedAt: Date.now(),
+            };
+            return {
+                notes: [...state.notes, newNote],
+                activeNoteId: newNote.id,
+                viewMode: 'edit'
+            };
+        });
     },
 
     deleteNote: (id) => set((state) => ({
@@ -102,19 +122,55 @@ export const useStore = create<AppState>((set) => ({
     })),
 
     addFolder: (name, parentId = null) => {
-        const newFolder: Folder = {
-            id: Math.random().toString(36).substring(2, 9),
-            name,
-            parentId,
-            isExpanded: true,
-            createdAt: Date.now(),
-        };
-        set((state) => ({ folders: [...state.folders, newFolder] }));
+        set((state) => {
+            const newFolder: Folder = {
+                id: Math.random().toString(36).substring(2, 9),
+                name,
+                parentId,
+                workspaceId: state.activeWorkspaceId,
+                isExpanded: true,
+                createdAt: Date.now(),
+            };
+            return { folders: [...state.folders, newFolder] };
+        });
     },
 
     deleteFolder: (id) => set((state) => ({
         folders: state.folders.filter(f => f.id !== id),
         notes: state.notes.map(n => n.folderId === id ? { ...n, folderId: null } : n),
+    })),
+
+    addWorkspace: (name, color) => {
+        const newWorkspace: Workspace = {
+            id: Math.random().toString(36).substring(2, 9),
+            name,
+            color,
+            createdAt: Date.now(),
+        };
+        set((state) => ({
+            workspaces: [...state.workspaces, newWorkspace],
+            activeWorkspaceId: newWorkspace.id,
+            activeNoteId: null, // Clear active note when switching to new workspace
+        }));
+    },
+
+    deleteWorkspace: (id) => set((state) => {
+        if (state.workspaces.length <= 1) return state; // Prevent deleting last workspace
+        const newWorkspaces = state.workspaces.filter(w => w.id !== id);
+        const isActiveDeleting = state.activeWorkspaceId === id;
+        const newActiveId = isActiveDeleting ? newWorkspaces[0].id : state.activeWorkspaceId;
+        
+        return {
+            workspaces: newWorkspaces,
+            activeWorkspaceId: newActiveId,
+            notes: state.notes.filter(n => n.workspaceId !== id),
+            folders: state.folders.filter(f => f.workspaceId !== id),
+            activeNoteId: isActiveDeleting ? null : state.activeNoteId,
+        };
+    }),
+
+    renameWorkspace: (id, name) => set((state) => ({
+        workspaces: state.workspaces.map(w => w.id === id ? { ...w, name } : w)
     })),
 
     toggleFolder: (id, expanded) => set((state) => ({

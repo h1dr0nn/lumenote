@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Settings as SettingsIcon, Share2 } from "lucide-react";
 import { SharePopup } from "./components/popups/SharePopup";
 import { SettingsPopup } from "./components/popups/SettingsPopup";
+import { WorkspaceModal } from './components/popups/WorkspaceModal';
 import { useEffect } from "react";
 
 function App() {
@@ -170,6 +171,7 @@ function App() {
         {/* Popups */}
         <SharePopup />
         <SettingsPopup />
+        <WorkspaceModal />
       </main>
     </div>
   );

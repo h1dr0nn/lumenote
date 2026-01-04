@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, memo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FileText, FolderPlus, Trash2, Edit3, Palette } from "lucide-react";
+import { FileText, FolderPlus, Trash2, Edit3, Palette, LayoutGrid } from "lucide-react";
 import { HexColorPicker } from "react-colorful";
 import { useStore } from "../../../store/useStore";
 import { t } from "../../../utils/i18n";
@@ -14,8 +14,8 @@ interface ContextMenuProps extends ContextMenuType {
 
 export const ContextMenu = memo(({ x, y, type, itemId, onClose, onRename }: ContextMenuProps) => {
     const { 
-        folders, notes, deleteNote, deleteFolder, addNote, 
-        addFolder, setNoteColor, setFolderColor, language 
+        folders, notes, workspaces, deleteNote, deleteFolder, deleteWorkspace, 
+        addNote, addFolder, setActivePopup, setNoteColor, setFolderColor, language 
     } = useStore();
     const ref = useRef<HTMLDivElement>(null);
     const [pos, setPos] = useState({ x, y });
@@ -54,9 +54,12 @@ export const ContextMenu = memo(({ x, y, type, itemId, onClose, onRename }: Cont
         if (type === 'note') {
             const note = notes.find(n => n.id === itemId);
             if (note) onRename(itemId, note.title);
-        } else {
+        } else if (type === 'folder') {
             const folder = folders.find(f => f.id === itemId);
             if (folder) onRename(itemId, folder.name);
+        } else if (type === 'workspace') {
+            const ws = workspaces.find(w => w.id === itemId);
+            if (ws) onRename(itemId, ws.name);
         }
         onClose();
     };
@@ -64,7 +67,7 @@ export const ContextMenu = memo(({ x, y, type, itemId, onClose, onRename }: Cont
     const handleSetColor = (color: string | null) => {
         if (!itemId) return;
         if (type === 'note') setNoteColor(itemId, color);
-        else setFolderColor(itemId, color);
+        else if (type === 'folder') setFolderColor(itemId, color);
         onClose();
     };
 
@@ -83,9 +86,14 @@ export const ContextMenu = memo(({ x, y, type, itemId, onClose, onRename }: Cont
         { icon: <Palette size={14} />, label: t('appearance', language), action: () => setShowColorPicker(!showColorPicker) },
         { icon: <Edit3 size={14} />, label: t('rename', language), action: handleRename },
         { icon: <Trash2 size={14} />, label: t('delete', language), action: () => { if (itemId) deleteFolder(itemId); onClose(); }, danger: true },
+    ] : type === 'workspace' ? [
+        { icon: <Edit3 size={14} />, label: t('rename', language), action: handleRename },
+        { icon: <Trash2 size={14} />, label: t('delete', language), action: () => { if (itemId) deleteWorkspace(itemId); onClose(); }, danger: true },
     ] : [
         { icon: <FileText size={14} />, label: t('new_note', language), action: () => { addNote(); onClose(); } },
         { icon: <FolderPlus size={14} />, label: t('new_folder', language), action: () => { addFolder(t('new_folder', language)); onClose(); } },
+        { type: 'separator' },
+        { icon: <LayoutGrid size={14} />, label: t('new_workspace', language), action: () => { setActivePopup('workspace_create'); onClose(); } },
     ];
 
     const currentColor = itemId ? (type === 'note' ? notes.find(n => n.id === itemId)?.color : folders.find(f => f.id === itemId)?.color) : null;
@@ -104,7 +112,9 @@ export const ContextMenu = memo(({ x, y, type, itemId, onClose, onRename }: Cont
             style={{ left: pos.x, top: pos.y }} 
             className="fixed bg-app-surface border border-border-subtle rounded-md shadow-md z-100 min-w-[220px] py-1 overflow-hidden"
         >
-            {items.map((item: any, i) => (
+            {items.map((item: any, i) => item.type === 'separator' ? (
+                <div key={i} className="h-px bg-border-subtle my-1" />
+            ) : (
                 <button 
                     key={i} 
                     onClick={(e) => { e.stopPropagation(); if (!item.disabled) item.action(); }} 

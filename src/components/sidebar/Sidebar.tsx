@@ -34,13 +34,17 @@ import { SortableItem } from "./components/SortableItem";
 import { DropdownMenu } from "./components/DropdownMenu";
 import { ContextMenu } from "./components/ContextMenu";
 import { FolderChildrenWrapper } from "./components/FolderChildrenWrapper";
+import { WorkspaceSwitcher } from "./components/WorkspaceSwitcher";
 
 export const Sidebar = () => {
     const { 
         notes, 
         folders, 
         activeNoteId, 
+        activeWorkspaceId,
+        workspaces,
         setActiveNoteId, 
+        setActivePopup,
         addNote, 
         addFolder, 
         toggleFolder, 
@@ -50,8 +54,13 @@ export const Sidebar = () => {
         moveFolderToFolder,
         renameNote,
         renameFolder,
+        renameWorkspace,
         language
     } = useStore();
+
+    // Filter notes and folders by active workspace
+    const workspaceNotes = useMemo(() => notes.filter(n => n.workspaceId === activeWorkspaceId), [notes, activeWorkspaceId]);
+    const workspaceFolders = useMemo(() => folders.filter(f => f.workspaceId === activeWorkspaceId), [folders, activeWorkspaceId]);
 
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [contextMenu, setContextMenu] = useState<ContextMenuType | null>(null);
@@ -70,15 +79,15 @@ export const Sidebar = () => {
     const allItemIds = useMemo(() => {
         const getVisualOrder = (parentId: string | null): string[] => {
             const result: string[] = [];
-            folders.filter((f: Folder) => f.parentId === parentId).forEach((folder: Folder) => {
+            workspaceFolders.filter((f: Folder) => f.parentId === parentId).forEach((folder: Folder) => {
                 result.push(folder.id);
                 if (folder.isExpanded) result.push(...getVisualOrder(folder.id));
             });
-            notes.filter((n: Note) => n.folderId === parentId).forEach((note: Note) => result.push(note.id));
+            workspaceNotes.filter((n: Note) => n.folderId === parentId).forEach((note: Note) => result.push(note.id));
             return result;
         };
         return getVisualOrder(null);
-    }, [folders, notes]);
+    }, [workspaceFolders, workspaceNotes]);
 
     const smartCollisionDetection = (args: any) => {
         const collisions = closestCorners(args);
@@ -251,27 +260,34 @@ export const Sidebar = () => {
 
     const handleRenameSave = () => {
         if (!editingId) return;
-        const trimmed = editValue.trim();
-        if (trimmed) {
-            if (isNote(editingId, notes)) renameNote(editingId, trimmed);
-            else if (isFolder(editingId, folders)) renameFolder(editingId, trimmed);
+        const trimmedValue = editValue.trim();
+        if (trimmedValue) {
+            const note = notes.find(n => n.id === editingId);
+            const folder = folders.find(f => f.id === editingId);
+            const ws = workspaces.find(w => w.id === editingId);
+
+            if (note) renameNote(editingId, trimmedValue);
+            else if (folder) renameFolder(editingId, trimmedValue);
+            else if (ws) renameWorkspace(editingId, trimmedValue);
         }
         setEditingId(null);
+        setEditValue('');
     };
 
     const handleRenameCancel = () => {
         setEditingId(null);
     };
 
-    const handleContextMenu = (e: React.MouseEvent, type: 'sidebar' | 'note' | 'folder', itemId?: string) => {
+    const handleContextMenu = (e: React.MouseEvent, type: ContextMenuType['type'], itemId?: string) => {
         e.preventDefault();
         e.stopPropagation();
         setContextMenu({ x: e.clientX, y: e.clientY, type, itemId });
     };
 
     const renderItems = (parentId: string | null, depth: number) => {
-        const childFolders = folders.filter(f => f.parentId === parentId);
-        const childNotes = notes.filter(n => n.folderId === parentId);
+        const childFolders = workspaceFolders.filter(f => f.parentId === parentId);
+        const childNotes = workspaceNotes.filter(n => n.folderId === parentId);
+        // ... (rest of renderItems logic unchanged, except using workspaceFolders/workspaceNotes)
         const items: React.ReactNode[] = [];
         const isDropIntoFolder = dropTarget?.position === 'inside';
 
@@ -335,10 +351,16 @@ export const Sidebar = () => {
     return (
         <div className="w-64 h-screen bg-app-sidebar border-r border-border-subtle flex flex-col" onContextMenu={(e) => handleContextMenu(e, 'sidebar')}>
             <div className="p-4 flex items-center justify-between">
-                <h1 className="font-semibold text-text-primary tracking-tight">Lumenote</h1>
+                <h1 className="font-semibold text-text-primary tracking-tight truncate">Lumenote</h1>
                 <div className="relative">
                     <button onClick={() => setDropdownOpen(!dropdownOpen)} className="p-1.5 rounded-sm hover:bg-app-hover text-text-secondary transition-colors"><Plus size={18} /></button>
-                    <DropdownMenu isOpen={dropdownOpen} onClose={() => setDropdownOpen(false)} onNewFile={() => addNote()} onNewFolder={() => addFolder(t('new_folder', language))} />
+                    <DropdownMenu 
+                        isOpen={dropdownOpen} 
+                        onClose={() => setDropdownOpen(false)} 
+                        onNewFile={() => addNote()} 
+                        onNewFolder={() => addFolder(t('new_folder', language))}
+                        onNewWorkspace={() => setActivePopup('workspace_create')}
+                    />
                 </div>
             </div>
 
@@ -363,9 +385,9 @@ export const Sidebar = () => {
                 }}>
                     {draggedId ? (
                         (() => {
-                            const depth = getItemDepth(draggedId, folders, notes);
-                            const draggedNote = notes.find(n => n.id === draggedId);
-                            const draggedFolder = folders.find(f => f.id === draggedId);
+                            const depth = getItemDepth(draggedId, workspaceFolders, workspaceNotes);
+                            const draggedNote = workspaceNotes.find(n => n.id === draggedId);
+                            const draggedFolder = workspaceFolders.find(f => f.id === draggedId);
 
                             return (
                                 <div 
@@ -398,8 +420,24 @@ export const Sidebar = () => {
                 </DragOverlay>
             </DndContext>
 
-            <div className="p-4 border-t border-border-muted text-xs text-text-muted">
-                {t('all_item_count', language, { notes: notes.length, folders: folders.length })}
+            {/* Footer switcher */}
+            <div className="p-3 border-t border-border-muted flex flex-col gap-3 bg-app-sidebar">
+                <WorkspaceSwitcher 
+                onContextMenu={(e, wsId) => handleContextMenu(e, 'workspace', wsId)}
+                editingId={editingId}
+                editValue={editValue}
+                onEditChange={setEditValue}
+                onEditSave={handleRenameSave}
+                onEditCancel={handleRenameCancel}
+            />
+                <div className="flex justify-between items-center px-1">
+                    <span className="text-[10px] text-text-muted font-medium uppercase tracking-wider">
+                        {workspaces.find(w => w.id === activeWorkspaceId)?.name || t('workspace', language)}
+                    </span>
+                    <span className="text-[10px] text-text-muted">
+                        {t('all_item_count', language, { notes: workspaceNotes.length, folders: workspaceFolders.length })}
+                    </span>
+                </div>
             </div>
 
             <AnimatePresence>
