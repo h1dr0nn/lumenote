@@ -1,0 +1,7 @@
+target/
+.env
+sync.db
+build.log
+build_info.txt
+.git
+.gitignore

@@ -26,6 +26,7 @@ describe('api utility', () => {
             workspace_id: 'default',
             created_at: 100,
             updated_at: 100,
+            version: 1,
         };
         await api.upsertNote(note);
         expect(invoke).toHaveBeenCalledWith('upsert_note', { note });
@@ -49,6 +50,8 @@ describe('api utility', () => {
             parent_id: null,
             workspace_id: 'default',
             created_at: 100,
+            updated_at: 100,
+            version: 1,
         };
         await api.upsertFolder(folder);
         expect(invoke).toHaveBeenCalledWith('upsert_folder', { folder });

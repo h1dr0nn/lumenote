@@ -15,6 +15,7 @@ vi.mock('../../utils/api', () => ({
 
 describe('useStore', () => {
     beforeEach(() => {
+        vi.useFakeTimers();
         vi.clearAllMocks();
         // Reset store to initial state
         useStore.setState({
@@ -26,6 +27,7 @@ describe('useStore', () => {
                     workspaceId: 'default',
                     createdAt: Date.now(),
                     updatedAt: Date.now(),
+                    version: 1,
                 }
             ],
             folders: [],
@@ -37,10 +39,10 @@ describe('useStore', () => {
 
     it('should initialize store from backend API', async () => {
         const mockNotes: NoteRecord[] = [
-            { id: '2', title: 'Remote Note', content: 'Remote', folder_id: null, workspace_id: 'default', created_at: 100, updated_at: 100 }
+            { id: '2', title: 'Remote Note', content: 'Remote', folder_id: null, workspace_id: 'default', created_at: 100, updated_at: 100, version: 1 }
         ];
         const mockFolders: FolderRecord[] = [
-            { id: 'f1', name: 'Remote Folder', parent_id: null, workspace_id: 'default', created_at: 100 }
+            { id: 'f1', name: 'Remote Folder', parent_id: null, workspace_id: 'default', created_at: 100, updated_at: 100, version: 1 }
         ];
 
         (api.getNotes as any).mockResolvedValue(mockNotes);
@@ -67,6 +69,8 @@ describe('useStore', () => {
         const { updateNoteContent } = useStore.getState();
         updateNoteContent('1', '# Updated');
         
+        vi.advanceTimersByTime(5000);
+
         expect(api.upsertNote).toHaveBeenCalledWith(expect.objectContaining({
             id: '1',
             content: '# Updated'

@@ -161,7 +161,7 @@ export const Preview = ({ content }: PreviewProps) => {
           remarkGemoji, 
           remarkFootnotes, 
           remarkGithubMarkdownAlerts
-        ]}
+        ] as any}
         rehypePlugins={[rehypeRaw]}
         components={{
           pre: ({ children }) => <>{children}</>,
