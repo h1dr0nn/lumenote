@@ -5,9 +5,11 @@ import { EditorToolbar } from "./components/toolbar/EditorToolbar";
 import { ViewModeToggle } from "./components/layout/ViewModeToggle";
 import { useStore } from "./store/useStore";
 import { motion, AnimatePresence } from "framer-motion";
-import { Settings as SettingsIcon, Share2 } from "lucide-react";
+import { Settings as SettingsIcon, Share2, Cloud, RefreshCw } from "lucide-react";
 import { SharePopup } from "./components/popups/SharePopup";
 import { SettingsPopup } from "./components/popups/SettingsPopup";
+import { SyncPopup } from "./components/popups/SyncPopup";
+import { t } from "./utils/i18n";
 import { useEffect } from "react";
 
 function App() {
@@ -19,8 +21,11 @@ function App() {
     activePopup, 
     setActivePopup,
     theme,
-    fontPreset, // renamed back to fontPreset for consistency with previous tool calls, or fontSet if I prefer
-    fontSize
+    fontPreset,
+    fontSize,
+    language,
+    isSyncing,
+    lastSyncedAt,
   } = useStore();
   const activeNote = notes.find(n => n.id === activeNoteId);
 
@@ -92,20 +97,57 @@ function App() {
             </span>
           </div>
 
-          <div className="flex items-center gap-1">
-            <div className="mr-4">
+          <div className="flex items-center gap-2">
+            <div className="mr-3">
               <ViewModeToggle />
             </div>
 
+            {/* Smart Pill Sync Button */}
+            <button 
+              onClick={() => setActivePopup('sync')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all group ${
+                activePopup === 'sync' 
+                  ? 'bg-accent/10 border-accent' 
+                  : 'bg-app-hover/50 border-border-muted hover:border-accent/30'
+              }`}
+            >
+              <div className={`w-2 h-2 rounded-full transition-colors ${
+                isSyncing 
+                  ? 'bg-accent animate-pulse' 
+                  : (lastSyncedAt ? 'bg-emerald-500' : 'bg-text-muted')
+              }`} />
+              <span className={`text-[11px] font-bold uppercase tracking-wider transition-colors ${
+                activePopup === 'sync' ? 'text-accent' : 'text-text-secondary group-hover:text-text-primary'
+              }`}>
+                {isSyncing ? t('syncing', language) : (lastSyncedAt ? t('sync_ready', language) : t('sync', language))}
+              </span>
+              {isSyncing ? (
+                <RefreshCw size={14} className="animate-spin text-accent" />
+              ) : (
+                <Cloud size={14} className={`transition-colors ${
+                  activePopup === 'sync' ? 'text-accent' : 'text-text-muted group-hover:text-text-secondary'
+                }`} />
+              )}
+            </button>
+
+            {/* Share Button */}
             <button 
               onClick={() => setActivePopup('share')}
-              className={`p-2 transition-colors ${activePopup === 'share' ? 'text-accent' : 'text-text-muted hover:text-text-secondary'}`}
+              className={`p-2 transition-colors rounded-lg ${
+                activePopup === 'share' ? 'text-accent bg-accent/5' : 'text-text-muted hover:text-text-secondary hover:bg-app-hover'
+              }`}
+              title={t('share', language)}
             >
               <Share2 size={18} />
             </button>
+
+            {/* Settings Button */}
             <button 
               onClick={() => setActivePopup('settings')}
-              className={`p-2 transition-colors ${activePopup === 'settings' ? 'text-accent' : 'text-text-muted hover:text-text-secondary'}`}
+              className={`p-2 transition-colors rounded-lg ${
+                activePopup === 'settings' ? 'text-accent bg-accent/5' : 'text-text-muted hover:text-text-secondary hover:bg-app-hover'
+              }`}
+              title={t('settings', language)}
             >
               <SettingsIcon size={18} />
             </button>
@@ -170,6 +212,7 @@ function App() {
         {/* Popups */}
         <SharePopup />
         <SettingsPopup />
+        <SyncPopup />
       </main>
     </div>
   );

@@ -36,7 +36,7 @@ export const WorkspaceSwitcher = ({
     };
 
     return (
-        <div className="flex items-center gap-2 p-1.5 bg-app-sidebar/30 backdrop-blur-sm rounded-lg border border-border-muted/50 overflow-hidden">
+        <div className="flex items-center gap-2 p-1.5 bg-app-sidebar/30 backdrop-blur-sm rounded-lg border border-border-muted overflow-hidden">
             {/* Scrollable Dots Container */}
             <div className="flex-1 flex items-center gap-1.5 overflow-x-auto scrollbar-hide no-scrollbar px-1 py-1">
                 {workspaces.map((ws) => {

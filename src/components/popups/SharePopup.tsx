@@ -4,6 +4,8 @@ import { Copy, FileText, Download, Check } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { t } from '../../utils/i18n';
+import { save } from '@tauri-apps/plugin-dialog';
+import { invoke } from '@tauri-apps/api/core';
 
 export const SharePopup = () => {
     const { activePopup, setActivePopup, notes, activeNoteId, language } = useStore();
@@ -33,16 +35,30 @@ export const SharePopup = () => {
         setTimeout(() => setCopiedText(false), 2000);
     };
 
-    const handleDownload = () => {
+    const handleDownload = async () => {
         if (!activeNote) return;
-        const element = document.createElement("a");
-        const file = new Blob([activeNote.content], {type: 'text/markdown'});
-        element.href = URL.createObjectURL(file);
-        element.download = `${activeNote.title || 'note'}.md`;
-        document.body.appendChild(element);
-        element.click();
-        document.body.removeChild(element);
-        toast.success(t('download_success', language));
+        
+        try {
+            const filePath = await save({
+                filters: [{
+                    name: 'Markdown',
+                    extensions: ['md']
+                }],
+                defaultPath: `${activeNote.title || 'note'}.md`
+            });
+
+            if (filePath) {
+                await invoke('write_text_file', { 
+                    path: filePath, 
+                    content: activeNote.content 
+                });
+                toast.success(t('download_success', language));
+            }
+        } catch (error) {
+            console.error('Failed to save file:', error);
+            const errorMsg = typeof error === 'string' ? error : (error instanceof Error ? error.message : String(error));
+            toast.error(language === 'vi' ? `Lỗi khi lưu tệp: ${errorMsg}` : `Failed to save file: ${errorMsg}`);
+        }
     };
 
     return (
@@ -90,7 +106,7 @@ export const SharePopup = () => {
                         {copiedText ? <Check size={16} className="text-accent" /> : null}
                     </button>
 
-                    <div className="pt-2 border-t border-border-muted/50 mt-4">
+                    <div className="pt-2 border-t border-border-muted mt-4">
                         <button 
                             onClick={handleDownload}
                             className="w-full flex items-center justify-between p-4 hover:bg-app-hover rounded-xl transition-all group"

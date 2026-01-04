@@ -3,7 +3,9 @@ import { Plus, Search, X, FileText } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useState, useRef, useMemo, useEffect } from "react";
 import { t } from "../../utils/i18n";
-// ... (rest of imports)
+import { open } from "@tauri-apps/plugin-dialog";
+import { toast } from "sonner";
+import { api } from "../../utils/api";
 import {
     DndContext,
     closestCorners,
@@ -314,6 +316,27 @@ export const Sidebar = () => {
     const handleRenameCancel = () => {
         setEditingId(null);
     };
+    
+    const handleExportWorkspace = async (workspaceId: string) => {
+        try {
+            const selected = await open({
+                directory: true,
+                multiple: false,
+                title: t('export', language)
+            });
+            if (selected) {
+                // selected can be a string or string[] or null
+                const path = Array.isArray(selected) ? selected[0] : selected;
+                if (path) {
+                    await api.exportWorkspace(workspaceId, path);
+                    toast.success(t('export_success', language));
+                }
+            }
+        } catch (error) {
+            console.error("Export failed:", error);
+            toast.error("Export failed");
+        }
+    };
 
     const handleContextMenu = (e: React.MouseEvent, type: ContextMenuType['type'], itemId?: string) => {
         e.preventDefault();
@@ -553,6 +576,7 @@ export const Sidebar = () => {
                         {...contextMenu} 
                         onClose={() => setContextMenu(null)} 
                         onRename={(id: string, val: string) => handleRenameStart(id, val)}
+                        onExport={handleExportWorkspace}
                     />
                 )}
             </AnimatePresence>

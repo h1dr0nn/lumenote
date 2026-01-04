@@ -188,20 +188,20 @@ Triết lý cốt lõi:
 
 #### Data
 
-- [ ] Note versioning (revision / updated_at)
-- [ ] Optional change log
-- [ ] Export workspace (markdown)
+- [x] Note versioning (revision / updated_at)
+- [x] Optional change log
+- [x] Export workspace (markdown)
 
 #### API / Boundary
 
-- [ ] API payload = markdown string
-- [ ] Frontend không biết sync logic
-- [ ] Rust backend owns data consistency
+- [x] API payload = markdown string
+- [x] Frontend không biết sync logic
+- [x] Rust backend owns data consistency
 
 ### Validation checklist
 
-- [ ] Xoá DB → import markdown → app hoạt động lại
-- [ ] Không feature nào cần data ngoài markdown
+- [x] Xoá DB → import markdown → app hoạt động lại
+- [x] Không feature nào cần data ngoài markdown
 
 ---
 
@@ -215,17 +215,17 @@ Triết lý cốt lõi:
 
 #### Rust server
 
-- [ ] Auth (token-based)
-- [ ] Sync API (notes, folders)
-- [ ] Conflict detection
-- [ ] Snapshot on conflict
-- [ ] Dockerfile + docker-compose
+- [x] Auth (token-based)
+- [x] Sync API (notes, folders)
+- [x] Conflict detection
+- [x] Snapshot on conflict (LWW strategy implemented)
+- [x] Dockerfile + docker-compose
 
 #### Client
 
-- [ ] Sync trigger
-- [ ] Offline-first behaviour
-- [ ] Sync status indicator
+- [x] Sync trigger
+- [x] Offline-first behaviour
+- [x] Sync status indicator
 
 ### Sync strategy (MVP)
 
@@ -235,9 +235,42 @@ Triết lý cốt lõi:
 
 ### Done criteria
 
-- 2 máy sync được
-- Conflict không làm mất markdown
-- Server down → app vẫn dùng offline
+- [x] 2 máy sync được
+- [x] Conflict không làm mất markdown
+- [x] Server down → app vẫn dùng offline
+
+---
+
+## Phase 7 — CI/CD Automation (GitHub Actions)
+
+**Mục tiêu**
+
+- Tự động hóa quy trình build & release cho cả Server và Client
+
+### Tasks
+
+#### GitHub Actions
+
+- [ ] Workflow: Build Docker image → Push to GitHub Packages
+- [ ] Workflow: Build & Release App (Multi-platform)
+  - Matrix: Windows (x64), Linux (x64), macOS (Intel/Silicon)
+  - Signing: Tauri v2 keys
+  - Artifacts: Setup, portable (Windows), updater bundles
+  - Auto-update `updater.json` & Push to repo
+  - Create GitHub Release
+
+#### Tauri Updater
+
+- [ ] Generate Tauri v2 Signing Keys
+- [ ] Configure `tauri.conf.json` for updater
+- [ ] Create initial `updater.json` structure
+
+### Done criteria
+
+- Commit tag `release-v*` → Tự động build, sign, update manifest và tạo release.
+- Đầy đủ artifacts cho Windows, Linux, macOS.
+- Nút "Check for update" trong app tải được version mới nhất.
+- Nút "Check for update" trong app hoạt động
 
 ---
 

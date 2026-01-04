@@ -1,0 +1,15 @@
+version: "3.8"
+
+services:
+  sync-server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - DATABASE_URL=sqlite:/app/data/sync.db?mode=rwc
+      - RUST_LOG=server=debug,tower_http=debug
+    restart: unless-stopped

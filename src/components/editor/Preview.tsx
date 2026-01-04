@@ -90,7 +90,14 @@ const CodeBlock = ({ language, children }: { language?: string; children: React.
     if (!language && codeText) {
       try {
         const result = hljs.highlightAuto(codeText);
-        if (result.language) setDetectedLang(result.language);
+        if (result.language) {
+          // If it looks like a URL and has no spaces, don't let auto-detect misidentify it
+          if (codeText.startsWith('http') && !codeText.includes(' ')) {
+            setDetectedLang('plaintext');
+          } else {
+            setDetectedLang(result.language);
+          }
+        }
       } catch { setDetectedLang('code'); }
     } else if (language) {
       setDetectedLang(language);

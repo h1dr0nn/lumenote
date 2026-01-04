@@ -1,0 +1,544 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - "develop-v*"
+      - "release-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build - ${{ matrix.platform }}-${{ matrix.arch }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Windows - x64
+          - os: windows-latest
+            platform: windows
+            arch: x64
+            target: x86_64-pc-windows-msvc
+          # Linux - x64
+          - os: ubuntu-22.04
+            platform: linux
+            arch: x64
+            target: x86_64-unknown-linux-gnu
+          # macOS - Intel (x64) - using macos-15-intel (supported until Aug 2027)
+          - os: macos-15-intel
+            platform: macos
+            arch: x64
+            target: x86_64-apple-darwin
+          # macOS - Apple Silicon (arm64)
+          - os: macos-latest
+            platform: macos
+            arch: arm64
+            target: aarch64-apple-darwin
+
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract Version from Tag
+        id: get_version
+        shell: bash
+        run: |
+          if [[ $GITHUB_REF == refs/tags/release-v* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/release-v}
+          elif [[ $GITHUB_REF == refs/tags/develop-v* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/develop-v}
+          else
+            VERSION="0.0.0"
+          fi
+          echo "Detected version: $VERSION"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Update Configuration Files
+        shell: bash
+        env:
+          VERSION: ${{ steps.get_version.outputs.version }}
+        run: |
+          # Update package.json
+          if command -v jq &> /dev/null; then
+            jq --arg v "$VERSION" '.version = $v' package.json > package.json.tmp && mv package.json.tmp package.json
+            jq --arg v "$VERSION" '.version = $v' src-tauri/tauri.conf.json > src-tauri/tauri.conf.json.tmp && mv src-tauri/tauri.conf.json.tmp src-tauri/tauri.conf.json
+          else
+            # Fallback for systems without jq - use node
+            node -e "const fs=require('fs'); const p=JSON.parse(fs.readFileSync('package.json')); p.version='$VERSION'; fs.writeFileSync('package.json', JSON.stringify(p, null, 2));"
+            node -e "const fs=require('fs'); const p=JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json')); p.version='$VERSION'; fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(p, null, 2));"
+          fi
+
+          echo "Updated versions to: $VERSION"
+          cat package.json | grep version || true
+          cat src-tauri/tauri.conf.json | grep version || true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Setup Rust Cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          cache-on-failure: true
+
+      - name: Install Dependencies (Linux)
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev patchelf libsoup-3.0-dev libjavascriptcoregtk-4.1-dev
+
+      - name: Install Frontend Dependencies
+        run: npm ci
+
+      - name: Prepare Signing Key
+        shell: bash
+        run: |
+          if [ -z "$RAW_KEY" ]; then
+            echo "::error:: TAURI_SIGNING_PRIVATE_KEY is empty. Please check the 'Repository secrets'."
+            exit 1
+          fi
+
+          # Strip everything except the base64 key (remove "untrusted comment:" line if present)
+          # Also remove any whitespace, newlines, carriage returns
+          BASE64_KEY=$(echo "$RAW_KEY" | grep -v "^untrusted comment:" | tr -d '[:space:]')
+
+          echo "Base64 key length: ${#BASE64_KEY} characters"
+          echo "Base64 key preview: ${BASE64_KEY:0:10}...${BASE64_KEY: -10}"
+
+          if [ -z "$BASE64_KEY" ]; then
+            echo "::error:: Could not extract base64 key from TAURI_SIGNING_PRIVATE_KEY."
+            exit 1
+          fi
+
+          # Pass base64 key only (no header)
+          echo "TAURI_SIGNING_PRIVATE_KEY=$BASE64_KEY" >> $GITHUB_ENV
+
+          echo "Signing key prepared successfully."
+        env:
+          RAW_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+
+      - name: Build Tauri App
+        run: npm run tauri build -- --target ${{ matrix.target }}
+        env:
+          # TAURI_SIGNING_PRIVATE_KEY is now provided via GITHUB_ENV from the previous step
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+      - name: Rename and Prepare Artifacts
+        shell: bash
+        env:
+          VERSION: ${{ steps.get_version.outputs.version }}
+          PLATFORM: ${{ matrix.platform }}
+          ARCH: ${{ matrix.arch }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          mkdir -p release-artifacts
+          echo "=== Debug: Listing bundle directory ==="
+          ls -R src-tauri/target/$TARGET/release/bundle || true
+
+          # Windows
+          if [ "$PLATFORM" == "windows" ]; then
+            cp src-tauri/target/$TARGET/release/bundle/nsis/*.exe "release-artifacts/lumenote-${VERSION}-windows-${ARCH}-setup.exe" 2>/dev/null || true
+            cp src-tauri/target/$TARGET/release/bundle/msi/*.msi "release-artifacts/lumenote-${VERSION}-windows-${ARCH}.msi" 2>/dev/null || true
+            
+            # Find Windows Updater Bundle (Tauri may create .nsis.zip or .msi.zip)
+            BUNDLE=$(find src-tauri/target/$TARGET/release/bundle -name "*.nsis.zip" -o -name "*.msi.zip" | head -n 1)
+            if [ -n "$BUNDLE" ]; then
+              cp "$BUNDLE" "release-artifacts/lumenote-${VERSION}-windows-${ARCH}-updater.zip"
+            else
+              # Fallback: Create updater bundle by zipping .msi file using 7z (available on Windows runner)
+              MSI_FILE=$(find src-tauri/target/$TARGET/release/bundle -name "*.msi" | head -n 1)
+              if [ -n "$MSI_FILE" ]; then
+                echo "Creating Windows updater bundle from .msi..."
+                7z a -tzip "release-artifacts/lumenote-${VERSION}-windows-${ARCH}-updater.msi.zip" "$MSI_FILE"
+              fi
+            fi
+            
+          # Linux
+          elif [ "$PLATFORM" == "linux" ]; then
+            cp src-tauri/target/$TARGET/release/bundle/appimage/*.AppImage "release-artifacts/lumenote-${VERSION}-linux-${ARCH}.AppImage" 2>/dev/null || true
+            cp src-tauri/target/$TARGET/release/bundle/deb/*.deb "release-artifacts/lumenote-${VERSION}-linux-${ARCH}.deb" 2>/dev/null || true
+            
+            # Find Linux Updater Bundle
+            BUNDLE=$(find src-tauri/target/$TARGET/release/bundle -name "*.AppImage.tar.gz" | head -n 1)
+            if [ -n "$BUNDLE" ]; then
+              cp "$BUNDLE" "release-artifacts/lumenote-${VERSION}-linux-${ARCH}-updater.AppImage.tar.gz"
+            else
+              # Fallback: Create updater bundle by compressing .AppImage file
+              APPIMAGE_FILE=$(find src-tauri/target/$TARGET/release/bundle -name "*.AppImage" | head -n 1)
+              if [ -n "$APPIMAGE_FILE" ]; then
+                echo "Creating Linux updater bundle from .AppImage..."
+                APPIMAGE_NAME=$(basename "$APPIMAGE_FILE")
+                tar -czvf "release-artifacts/lumenote-${VERSION}-linux-${ARCH}-updater.AppImage.tar.gz" -C "$(dirname "$APPIMAGE_FILE")" "$APPIMAGE_NAME"
+              fi
+            fi
+
+          # macOS
+          elif [ "$PLATFORM" == "macos" ]; then
+            cp src-tauri/target/$TARGET/release/bundle/dmg/*.dmg "release-artifacts/lumenote-${VERSION}-macos-${ARCH}.dmg" 2>/dev/null || true
+            
+            # Find and rename macOS Updater Bundle
+            BUNDLE=$(find src-tauri/target/$TARGET/release/bundle -name "*.app.tar.gz" | head -n 1)
+            if [ -n "$BUNDLE" ]; then
+              cp "$BUNDLE" "release-artifacts/lumenote-${VERSION}-macos-${ARCH}-updater.app.tar.gz"
+            fi
+          fi
+
+          # Recursive Signature Extraction (Tauri v2)
+          echo "Extracting signatures..."
+
+          # Use find with -print0 and read with IFS to handle filenames with spaces
+          find src-tauri/target/$TARGET/release/bundle -name "*.sig" -print0 2>/dev/null | while IFS= read -r -d '' sig; do
+            echo "Found signature file: $sig"
+            binary_name=$(basename "$sig" .sig)
+            
+            # Debug: show file content
+            echo "=== Content of $sig ==="
+            cat "$sig"
+            echo ""
+            echo "=== End of $sig ==="
+            
+            # Try to extract signature - Tauri v2 .sig files may have different formats
+            # Format 1: minisign (line 1 = untrusted comment, line 2 = signature)
+            # Format 2: just base64 signature
+            
+            if grep -q "^untrusted comment:" "$sig" 2>/dev/null; then
+              # Minisign format - extract line 2
+              SIG_CONTENT=$(sed -n '2p' "$sig" | tr -d '\r\n')
+            else
+              # Single line base64 format - use entire content
+              SIG_CONTENT=$(cat "$sig" | tr -d '\r\n')
+            fi
+            
+            echo "Extracted signature (length=${#SIG_CONTENT}): ${SIG_CONTENT:0:50}..."
+            
+            if [ -n "$SIG_CONTENT" ]; then
+              echo "$SIG_CONTENT" > "release-artifacts/${binary_name}.sig.txt"
+              
+              # Also create signature for our renamed updater files
+              case "$binary_name" in
+                *_en-US.msi|*.msi)
+                  echo "$SIG_CONTENT" > "release-artifacts/lumenote-${VERSION}-windows-${ARCH}-updater.msi.zip.sig.txt"
+                  echo "Created Windows updater signature"
+                  ;;
+                *.AppImage)
+                  echo "$SIG_CONTENT" > "release-artifacts/lumenote-${VERSION}-linux-${ARCH}-updater.AppImage.tar.gz.sig.txt"
+                  echo "Created Linux updater signature"
+                  ;;
+                *.app.tar.gz)
+                  echo "$SIG_CONTENT" > "release-artifacts/lumenote-${VERSION}-macos-${ARCH}-updater.app.tar.gz.sig.txt"
+                  echo "Created macOS updater signature"
+                  ;;
+              esac
+            else
+              echo "WARNING: Empty signature content for $sig"
+            fi
+          done
+
+          # Create legacy signature fallback (also handle spaces in filename)
+          SIG_FILE=$(find src-tauri/target/$TARGET/release/bundle -name "*.sig" -print 2>/dev/null | head -n 1)
+          if [ -n "$SIG_FILE" ]; then
+            echo "Creating legacy signature from: $SIG_FILE"
+            if grep -q "^untrusted comment:" "$SIG_FILE" 2>/dev/null; then
+              sed -n '2p' "$SIG_FILE" | tr -d '\r\n' > "release-artifacts/${PLATFORM}-${ARCH}.legacy.sig.txt"
+            else
+              cat "$SIG_FILE" | tr -d '\r\n' > "release-artifacts/${PLATFORM}-${ARCH}.legacy.sig.txt"
+            fi
+          fi
+
+          echo "Artifacts prepared:"
+          ls -la release-artifacts/
+
+      - name: Create Windows Portable ZIP
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.get_version.outputs.version }}
+          ARCH: ${{ matrix.arch }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          $portableExe = "release-artifacts/lumenote-${env:VERSION}-windows-${env:ARCH}-portable.exe"
+          $zipFile = "release-artifacts/lumenote-${env:VERSION}-windows-${env:ARCH}-portable.zip"
+
+          # Debug: List what we have
+          Write-Host "=== Contents of release-artifacts ==="
+          Get-ChildItem release-artifacts -ErrorAction SilentlyContinue | Format-Table Name, Length
+
+          # If portable exe doesn't exist, try to find and copy it
+          if (-not (Test-Path $portableExe)) {
+            Write-Host "Portable exe not found at expected path, searching..."
+            $releaseDir = "src-tauri/target/${env:TARGET}/release"
+            
+            # List all exes to debug
+            Write-Host "=== EXEs in release folder ==="
+            Get-ChildItem "$releaseDir/*.exe" -ErrorAction SilentlyContinue | Format-Table Name, Length
+            
+            # Try finding the main app exe
+            $candidates = @(
+              "$releaseDir/Lumenote.exe",
+              "$releaseDir/lumenote.exe"
+            )
+            foreach ($candidate in $candidates) {
+              if (Test-Path $candidate) {
+                Copy-Item $candidate -Destination $portableExe
+                Write-Host "Found and copied: $candidate"
+                break
+              }
+            }
+          }
+
+          if (Test-Path $portableExe) {
+            # Create temp folder and copy files
+            New-Item -ItemType Directory -Force -Path "portable-temp" | Out-Null
+            Copy-Item $portableExe -Destination "portable-temp/lumenote.exe"
+            
+            # Bundle ALL DLLs from release folder (WebView2Loader.dll, etc.)
+            $releaseDir = "src-tauri/target/${env:TARGET}/release"
+            $dlls = Get-ChildItem "$releaseDir/*.dll" -ErrorAction SilentlyContinue
+            foreach ($dll in $dlls) {
+              Copy-Item $dll.FullName -Destination "portable-temp/"
+              Write-Host "Bundled DLL: $($dll.Name)"
+            }
+            
+            # Create ZIP
+            Compress-Archive -Path "portable-temp/*" -DestinationPath $zipFile -Force
+            Remove-Item -Recurse -Force "portable-temp"
+            
+            Write-Host "Created portable ZIP: $zipFile"
+            Write-Host "=== ZIP Contents ==="
+            # Show contents
+            Expand-Archive -Path $zipFile -DestinationPath "zip-check" -Force
+            Get-ChildItem "zip-check" | Format-Table Name, Length
+            Remove-Item -Recurse -Force "zip-check"
+          } else {
+            Write-Host "ERROR: Portable exe not found, skipping ZIP creation"
+            Write-Host "This may indicate a build issue - check previous steps"
+          }
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-${{ matrix.platform }}-${{ matrix.arch }}
+          path: release-artifacts/*
+          retention-days: 7
+          if-no-files-found: warn
+
+  create-release:
+    name: Create Release & Update Manifest
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract Version from Tag
+        id: get_version
+        run: |
+          if [[ $GITHUB_REF == refs/tags/release-v* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/release-v}
+          elif [[ $GITHUB_REF == refs/tags/develop-v* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/develop-v}
+          else
+            VERSION="0.0.0"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: artifacts-*
+          merge-multiple: true
+
+      - name: Update updater.json
+        shell: bash
+        env:
+          VERSION: ${{ steps.get_version.outputs.version }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          node << 'EOF'
+          const fs = require('fs');
+          const fileName = 'updater.json';
+          let updater = {};
+
+          // Initial info if not exists
+          if (fs.existsSync(fileName)) {
+            updater = JSON.parse(fs.readFileSync(fileName, 'utf8'));
+          } else {
+            updater = {
+                version: process.env.VERSION,
+                notes: "Update for " + process.env.VERSION,
+                pub_date: new Date().toISOString(),
+                platforms: {
+                    "darwin-aarch64": { signature: "", url: "" },
+                    "darwin-x86_64": { signature: "", url: "" },
+                    "linux-x86_64": { signature: "", url: "" },
+                    "windows-x86_64": { signature: "", url: "" }
+                }
+            };
+          }
+
+          const version = process.env.VERSION;
+          const tagName = process.env.TAG_NAME;
+
+          updater.version = version;
+          updater.pub_date = new Date().toISOString();
+
+          const platformMap = {
+            'windows-x64': 'windows-x86_64',
+            'linux-x64': 'linux-x86_64',
+            'macos-x64': 'darwin-x86_64',
+            'macos-arm64': 'darwin-aarch64'
+          };
+
+          const files = fs.readdirSync('artifacts');
+          console.log('Available artifacts:', files);
+
+          Object.entries(platformMap).forEach(([key, updaterKey]) => {
+            console.log(`Processing platform: ${key} (${updaterKey})`);
+            
+            if (!updater.platforms[updaterKey]) {
+                 updater.platforms[updaterKey] = { signature: "", url: "" };
+            }
+
+            const baseUrl = `https://github.com/${process.env.GITHUB_REPOSITORY}/releases/download/${tagName}`;
+            
+            // 1. Find the updater binary with multiple fallbacks
+            let binaryFile = null;
+            
+            // Try standardized naming first
+            binaryFile = files.find(f => f.includes(`${key}-updater`));
+            
+            // Fallback patterns for each platform
+            if (!binaryFile) {
+                if (updaterKey === 'windows-x86_64') {
+                    binaryFile = files.find(f => f.includes('windows') && f.endsWith('.nsis.zip'));
+                    if (!binaryFile) binaryFile = files.find(f => f.includes('windows') && f.endsWith('.msi.zip'));
+                    if (!binaryFile) binaryFile = files.find(f => f.includes('windows') && f.endsWith('.msi'));
+                } else if (updaterKey === 'linux-x86_64') {
+                    binaryFile = files.find(f => f.includes('linux') && f.endsWith('.AppImage.tar.gz'));
+                    if (!binaryFile) binaryFile = files.find(f => f.includes('linux') && f.endsWith('.AppImage'));
+                } else if (updaterKey === 'darwin-x86_64') {
+                    binaryFile = files.find(f => f.includes('macos-x64') && f.endsWith('.app.tar.gz'));
+                } else if (updaterKey === 'darwin-aarch64') {
+                    binaryFile = files.find(f => f.includes('macos-arm64') && f.endsWith('.app.tar.gz'));
+                }
+            }
+
+            if (binaryFile) {
+                updater.platforms[updaterKey].url = `${baseUrl}/${binaryFile}`;
+                console.log(`  Binary matched: ${binaryFile}`);
+
+                // 2. Find signature - try multiple patterns
+                let sigContent = '';
+                
+                // Pattern 1: Exact match for renamed binary
+                const sigFileName = `${binaryFile}.sig.txt`;
+                const sigFilePath = `artifacts/${sigFileName}`;
+                if (fs.existsSync(sigFilePath)) {
+                    const content = fs.readFileSync(sigFilePath, 'utf8').trim();
+                    console.log(`  Checking ${sigFileName}: length=${content.length}, content="${content.substring(0, 50)}..."`);
+                    if (content) {
+                        sigContent = content;
+                        console.log(`  Signature loaded from: ${sigFileName}`);
+                    }
+                }
+                
+                // Pattern 2: Legacy fallback (more reliable since it's created from Tauri's .sig files)
+                if (!sigContent) {
+                    const legacySigFile = `artifacts/${key}.legacy.sig.txt`;
+                    if (fs.existsSync(legacySigFile)) {
+                        const content = fs.readFileSync(legacySigFile, 'utf8').trim();
+                        console.log(`  Checking legacy ${key}.legacy.sig.txt: length=${content.length}, content="${content.substring(0, 50)}..."`);
+                        if (content) {
+                            sigContent = content;
+                            console.log(`  Signature loaded from legacy: ${key}.legacy.sig.txt`);
+                        }
+                    }
+                }
+
+                if (sigContent) {
+                    updater.platforms[updaterKey].signature = sigContent;
+                    console.log(`  SUCCESS: Signature set for ${updaterKey}`);
+                } else {
+                    console.log(`  WARNING: No signature content found for ${binaryFile}`);
+                }
+            } else {
+                console.log(`  WARNING: No updater binary found for ${updaterKey}`);
+            }
+          });
+
+          fs.writeFileSync('updater.json', JSON.stringify(updater, null, 2));
+          console.log('Update of updater.json completed.');
+          EOF
+
+      - name: Commit and Push updater.json
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add updater.json
+
+          # Only commit if there are actual changes
+          if git diff --staged --quiet; then
+            echo "No changes in updater.json to commit."
+            exit 0
+          fi
+
+          git commit -m "chore: update updater.json for version ${{ steps.get_version.outputs.version }} [skip ci]"
+
+          # Fetch and rebase to avoid conflicts
+          git fetch origin main
+          git rebase origin/main
+
+          # Push specifically from HEAD to remote main branch
+          git push origin HEAD:main
+
+      - name: Prepare Release Files
+        run: |
+          mkdir -p release-files
+          # Copy only installers and portable versions
+          # Exclude: .sig.txt files and -updater.* files (used internally for auto-update)
+          find artifacts -type f \
+            ! -name "*.sig.txt" \
+            ! -name "*-updater.*" \
+            -exec cp {} release-files/ \;
+          echo "Files to be uploaded to release:"
+          ls -la release-files/
+
+      - name: Determine Release Type
+        id: release_type
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/release-v* ]]; then
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+            echo "release_name=Lumenote ${{ steps.get_version.outputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+            echo "release_name=Development Build ${{ steps.get_version.outputs.version }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ steps.release_type.outputs.release_name }}
+          tag_name: ${{ github.ref_name }}
+          draft: false
+          prerelease: ${{ steps.release_type.outputs.is_prerelease }}
+          files: release-files/*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

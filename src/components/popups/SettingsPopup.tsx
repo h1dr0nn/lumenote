@@ -4,6 +4,9 @@ import { Sun, Moon, Monitor, Type, Minus, Plus, Languages } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { t } from '../../utils/i18n';
 
+import { getName, getVersion } from '@tauri-apps/api/app';
+import { useState, useEffect } from 'react';
+
 export const SettingsPopup = () => {
     const { 
         activePopup, setActivePopup,
@@ -12,6 +15,25 @@ export const SettingsPopup = () => {
         fontSize, setFontSize,
         language, setLanguage
     } = useStore();
+
+    const [appVersion, setAppVersion] = useState<string>('');
+    const [appName, setAppName] = useState<string>('Lumenote');
+
+    useEffect(() => {
+        const fetchAppInfo = async () => {
+            try {
+                const v = await getVersion();
+                setAppVersion(v);
+                const n = await getName();
+                // Capitalize first letter if it defaults to lowercase 'lumenote'
+                setAppName(n.charAt(0).toUpperCase() + n.slice(1)); 
+            } catch (e) {
+                console.error('Failed to get app info', e);
+                setAppVersion('0.1.0'); // Fallback
+            }
+        };
+        fetchAppInfo();
+    }, []);
 
     const segmentedControl = (
         options: { id: string, label: string, icon?: any }[],
@@ -121,10 +143,19 @@ export const SettingsPopup = () => {
                 </section>
 
                 {/* About Section */}
-                <section className="pt-4 border-t border-border-muted/50">
-                    <div className="flex items-center justify-between opacity-50">
-                        <span className="text-[10px] font-medium text-text-muted">Lumenote v0.1.0</span>
-                        <span className="text-[10px] font-medium text-text-muted">h1dr0n</span>
+                <section className="pt-4 border-t border-border-muted">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <span className="text-[10px] font-medium text-text-muted opacity-50">{appName} v{appVersion || '...'}</span>
+                            <div className="w-px h-3 bg-border-muted/30" />
+                            <button 
+                                className="text-[10px] font-medium text-text-muted hover:text-accent transition-colors underline-offset-2 hover:underline"
+                                onClick={() => console.log('Check for update clicked')}
+                            >
+                                {t('check_update', language)}
+                            </button>
+                        </div>
+                        <span className="text-[10px] font-medium text-text-muted opacity-50">h1dr0n</span>
                     </div>
                 </section>
             </div>

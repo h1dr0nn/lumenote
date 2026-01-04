@@ -10,9 +10,10 @@ import { ContextMenuType } from "../types";
 interface ContextMenuProps extends ContextMenuType {
     onClose: () => void;
     onRename: (id: string, val: string) => void;
+    onExport?: (id: string) => void;
 }
 
-export const ContextMenu = memo(({ x, y, type, itemId, onClose, onRename }: ContextMenuProps) => {
+export const ContextMenu = memo(({ x, y, type, itemId, onClose, onRename, onExport }: ContextMenuProps) => {
     const { 
         folders, notes, workspaces, deleteNote, deleteFolder, deleteWorkspace, 
         addNote, addFolder, addWorkspace, setNoteColor, setFolderColor, setWorkspaceColor, language 
@@ -90,6 +91,7 @@ export const ContextMenu = memo(({ x, y, type, itemId, onClose, onRename }: Cont
     ] : type === 'workspace' ? [
         { icon: <Edit3 size={14} />, label: t('rename', language), action: handleRename },
         { icon: <Palette size={14} />, label: t('appearance', language), action: () => setShowColorPicker(!showColorPicker) },
+        { icon: <FileText size={14} />, label: t('export_markdown', language), action: () => { if (itemId) onExport?.(itemId); onClose(); } },
         { icon: <Trash2 size={14} />, label: t('delete', language), action: () => { if (itemId) deleteWorkspace(itemId); onClose(); }, danger: true },
     ] : [
         { icon: <FileText size={14} />, label: t('new_note', language), action: () => { addNote(); onClose(); } },

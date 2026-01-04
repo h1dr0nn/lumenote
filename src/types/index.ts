@@ -15,17 +15,20 @@ export interface Note {
     createdAt: number;
     updatedAt: number;
     color?: string;
+    version: number;
 }
 
 export interface Folder {
     id: string;
     name: string;
     parentId?: string | null;
-    workspaceId: string; // Required for all folders
+    workspaceId: string;
     index?: number;
     isExpanded?: boolean;
     createdAt: number;
+    updatedAt: number;
     color?: string;
+    version: number;
 }
 
 export type ViewMode = 'edit' | 'view';

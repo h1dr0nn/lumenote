@@ -1,9 +1,11 @@
 mod db;
+mod exporter;
 
 use db::{
-    delete_folder, delete_note, get_folders, get_notes, init_db, search_notes, upsert_folder,
-    upsert_note, DbState,
+    apply_remote_update_folder, apply_remote_update_note, delete_folder, delete_note, get_folders,
+    get_notes, get_sync_data, init_db, search_notes, upsert_folder, upsert_note, DbState,
 };
+use exporter::{export_workspace, write_text_file};
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -31,6 +33,7 @@ pub fn run() {
             Ok(())
         })
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             get_notes,
             upsert_note,
@@ -38,7 +41,12 @@ pub fn run() {
             get_folders,
             upsert_folder,
             delete_folder,
-            search_notes
+            search_notes,
+            export_workspace,
+            write_text_file,
+            get_sync_data,
+            apply_remote_update_note,
+            apply_remote_update_folder
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -22,3 +22,18 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# User junk files
+~
+src-tauri/test_output.txt
+
+# OS & Environment
+Thumbs.db
+.env
+
+# Server
+server/.env
+server/target/
+server/sync.db
+server/build.log
+server/build_info.txt

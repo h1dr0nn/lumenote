@@ -207,7 +207,7 @@ export const EditorToolbar = () => {
                 
                 {showGrid && (
                     <div 
-                        className="absolute top-full left-0 z-[100] pt-1 origin-top-left"
+                        className="absolute top-full left-0 z-100 pt-1 origin-top-left"
                     >
                         <div 
                             className="bg-app-surface border border-border-subtle shadow-2xl p-3 rounded-md w-max overflow-hidden animate-in fade-in zoom-in-95 duration-100"

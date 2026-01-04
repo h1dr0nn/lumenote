@@ -3,7 +3,7 @@ import { EditorState, EditorSelection, SelectionRange } from '@codemirror/state'
 import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { markdown, markdownKeymap } from '@codemirror/lang-markdown';
-import { syntaxHighlighting, defaultHighlightStyle, HighlightStyle } from '@codemirror/language';
+import { syntaxHighlighting, HighlightStyle } from '@codemirror/language';
 import { tags } from '@lezer/highlight';
 import { useStore } from '../../store/useStore';
 
@@ -86,8 +86,24 @@ const toggleHeading = (level: number) => (view: EditorView) => {
     return true;
 };
 
-// Custom style to keep editor text plain (no bold/italic rendering)
-const plainTextStyle = HighlightStyle.define([
+// Comprehensive modern highlighting style using theme variables
+const modernHighlightStyle = HighlightStyle.define([
+    { tag: tags.heading, color: 'var(--syntax-h1-h6)', fontWeight: 'bold' },
+    { tag: tags.keyword, color: 'var(--syntax-keyword)' },
+    { tag: tags.string, color: 'var(--syntax-string)' },
+    { tag: tags.comment, color: 'var(--syntax-comment)', fontStyle: 'italic' },
+    
+    // Link text stands out as primary blue
+    { tag: [tags.link, tags.labelName], color: 'var(--syntax-link)' },
+    
+    // Metadata like URLs, brackets, and punctuation are dimmed for clarity
+    { tag: [tags.url, tags.punctuation, tags.separator, tags.bracket, tags.meta], color: 'var(--syntax-meta)' },
+    
+    { tag: [tags.strong, tags.emphasis, tags.strikethrough], color: 'var(--syntax-markup)' },
+    { tag: [tags.literal, tags.className, tags.tagName], color: 'var(--syntax-special)' },
+    { tag: tags.contentSeparator, color: 'var(--syntax-hr)' },
+    
+    // Reset formatting for a clean "plain text editor" feel where appropriate
     { tag: tags.strong, fontWeight: 'normal' },
     { tag: tags.emphasis, fontStyle: 'normal' },
 ]);
@@ -174,6 +190,13 @@ export const MarkdownEditor = ({ value, onChange, onSelectionChange }: MarkdownE
                 keymap.of([
                     { key: "Mod-b", run: toggleBold },
                     { key: "Mod-i", run: toggleItalic },
+                    { key: "Mod-s", run: () => {
+                        const state = useStore.getState();
+                        if (state.activeNoteId) {
+                            state.saveNote(state.activeNoteId);
+                        }
+                        return true;
+                    }},
                     { key: "Mod-1", run: toggleHeading(1) },
                     { key: "Mod-2", run: toggleHeading(2) },
                     { key: "Mod-3", run: toggleHeading(3) },
@@ -181,8 +204,7 @@ export const MarkdownEditor = ({ value, onChange, onSelectionChange }: MarkdownE
                     ...historyKeymap
                 ]),
                 markdown(),
-                syntaxHighlighting(defaultHighlightStyle),
-                syntaxHighlighting(plainTextStyle),
+                syntaxHighlighting(modernHighlightStyle),
                 lumenoteTheme,
                 updateListener,
                 EditorView.lineWrapping,

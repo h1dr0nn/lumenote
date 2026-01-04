@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use sqlx::{sqlite::SqlitePoolOptions, Pool, Sqlite};
 
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, Clone)]
 pub struct NoteRecord {
     pub id: String,
     pub title: String,
@@ -10,6 +10,8 @@ pub struct NoteRecord {
     pub workspace_id: String,
     pub created_at: i64,
     pub updated_at: i64,
+    pub version: i32,
+    pub is_deleted: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
@@ -19,7 +21,10 @@ pub struct FolderRecord {
     pub parent_id: Option<String>,
     pub workspace_id: String,
     pub created_at: i64,
+    pub updated_at: i64,
+    pub version: i32,
     pub color: Option<String>,
+    pub is_deleted: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
@@ -39,22 +44,96 @@ impl Db {
     }
 
     pub async fn get_notes(&self) -> Result<Vec<NoteRecord>, String> {
-        sqlx::query_as::<_, NoteRecord>("SELECT * FROM notes")
+        sqlx::query_as::<_, NoteRecord>("SELECT * FROM notes WHERE is_deleted = 0")
             .fetch_all(&self.pool)
             .await
             .map_err(|e| e.to_string())
     }
 
     pub async fn upsert_note(&self, note: NoteRecord) -> Result<(), String> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|e| e.to_string())?
+            .as_millis() as i64;
+
+        // Get old content and created_at if exists
+        let old_note: Option<(String, i64, i32)> =
+            sqlx::query_as("SELECT content, created_at, version FROM notes WHERE id = ?1")
+                .bind(&note.id)
+                .fetch_optional(&self.pool)
+                .await
+                .unwrap_or(None);
+
+        let (new_version, created_at) = match old_note {
+            Some((_, ca, v)) => (v + 1, ca),
+            None => (1, now),
+        };
+
         sqlx::query(
-            "INSERT INTO notes (id, title, content, folder_id, workspace_id, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            "INSERT INTO notes (id, title, content, folder_id, workspace_id, created_at, updated_at, version)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
              ON CONFLICT(id) DO UPDATE SET
                 title = excluded.title,
                 content = excluded.content,
                 folder_id = excluded.folder_id,
                 workspace_id = excluded.workspace_id,
-                updated_at = excluded.updated_at",
+                updated_at = excluded.updated_at,
+                version = excluded.version,
+                is_deleted = excluded.is_deleted",
+        )
+        .bind(&note.id)
+        .bind(&note.title)
+        .bind(&note.content)
+        .bind(&note.folder_id)
+        .bind(&note.workspace_id)
+        .bind(created_at)
+        .bind(now)
+        .bind(new_version)
+        .bind(note.is_deleted)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+        // Log change if content actually changed or if it's new
+        let content_changed = match old_note {
+            Some((ref old_content, _, _)) => old_content != &note.content,
+            None => true,
+        };
+
+        if content_changed {
+            let change_id = uuid::Uuid::new_v4().to_string();
+            sqlx::query(
+                "INSERT INTO changes (id, note_id, old_content, new_content, timestamp, version)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            )
+            .bind(change_id)
+            .bind(&note.id)
+            .bind(old_note.map(|(c, _, _)| c))
+            .bind(&note.content)
+            .bind(now)
+            .bind(new_version)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| e.to_string())?;
+        }
+
+        Ok(())
+    }
+
+    pub async fn apply_remote_update_note(&self, note: NoteRecord) -> Result<(), String> {
+        // LWW: Only update if remote updated_at > local updated_at
+        sqlx::query(
+            "INSERT INTO notes (id, title, content, folder_id, workspace_id, created_at, updated_at, version, is_deleted)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+             ON CONFLICT(id) DO UPDATE SET
+                title = excluded.title,
+                content = excluded.content,
+                folder_id = excluded.folder_id,
+                workspace_id = excluded.workspace_id,
+                updated_at = excluded.updated_at,
+                version = excluded.version,
+                is_deleted = excluded.is_deleted
+             WHERE excluded.updated_at > notes.updated_at",
         )
         .bind(&note.id)
         .bind(&note.title)
@@ -63,6 +142,8 @@ impl Db {
         .bind(&note.workspace_id)
         .bind(note.created_at)
         .bind(note.updated_at)
+        .bind(note.version)
+        .bind(note.is_deleted)
         .execute(&self.pool)
         .await
         .map(|_| ())
@@ -70,7 +151,13 @@ impl Db {
     }
 
     pub async fn delete_note(&self, id: String) -> Result<(), String> {
-        sqlx::query("DELETE FROM notes WHERE id = ?1")
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as i64;
+
+        sqlx::query("UPDATE notes SET is_deleted = 1, updated_at = ?1 WHERE id = ?2")
+            .bind(now)
             .bind(id)
             .execute(&self.pool)
             .await
@@ -79,28 +166,81 @@ impl Db {
     }
 
     pub async fn get_folders(&self) -> Result<Vec<FolderRecord>, String> {
-        sqlx::query_as::<_, FolderRecord>("SELECT * FROM folders")
+        sqlx::query_as::<_, FolderRecord>("SELECT * FROM folders WHERE is_deleted = 0")
             .fetch_all(&self.pool)
             .await
             .map_err(|e| e.to_string())
     }
 
     pub async fn upsert_folder(&self, folder: FolderRecord) -> Result<(), String> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|e| e.to_string())?
+            .as_millis() as i64;
+
+        // Get old created_at and version if exists
+        let old_folder: Option<(i64, i32)> =
+            sqlx::query_as("SELECT created_at, version FROM folders WHERE id = ?1")
+                .bind(&folder.id)
+                .fetch_optional(&self.pool)
+                .await
+                .unwrap_or(None);
+
+        let (created_at, new_version) = match old_folder {
+            Some((ca, v)) => (ca, v + 1),
+            None => (now, 1),
+        };
+
         sqlx::query(
-            "INSERT INTO folders (id, name, parent_id, workspace_id, created_at, color)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            "INSERT INTO folders (id, name, parent_id, workspace_id, created_at, updated_at, version, color, is_deleted)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
              ON CONFLICT(id) DO UPDATE SET
                 name = excluded.name,
                 parent_id = excluded.parent_id,
                 workspace_id = excluded.workspace_id,
+                updated_at = excluded.updated_at,
+                version = excluded.version,
+                is_deleted = excluded.is_deleted,
                 color = excluded.color",
         )
         .bind(&folder.id)
         .bind(&folder.name)
         .bind(&folder.parent_id)
         .bind(&folder.workspace_id)
-        .bind(folder.created_at)
+        .bind(created_at)
+        .bind(now)
+        .bind(new_version)
         .bind(&folder.color)
+        .bind(folder.is_deleted)
+        .execute(&self.pool)
+        .await
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+    }
+
+    pub async fn apply_remote_update_folder(&self, folder: FolderRecord) -> Result<(), String> {
+        sqlx::query(
+            "INSERT INTO folders (id, name, parent_id, workspace_id, created_at, updated_at, version, color, is_deleted)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+             ON CONFLICT(id) DO UPDATE SET
+                name = excluded.name,
+                parent_id = excluded.parent_id,
+                workspace_id = excluded.workspace_id,
+                updated_at = excluded.updated_at,
+                version = excluded.version,
+                is_deleted = excluded.is_deleted,
+                color = excluded.color
+             WHERE excluded.updated_at > folders.updated_at",
+        )
+        .bind(&folder.id)
+        .bind(&folder.name)
+        .bind(&folder.parent_id)
+        .bind(&folder.workspace_id)
+        .bind(folder.created_at)
+        .bind(folder.updated_at)
+        .bind(folder.version)
+        .bind(&folder.color)
+        .bind(folder.is_deleted)
         .execute(&self.pool)
         .await
         .map(|_| ())
@@ -108,12 +248,38 @@ impl Db {
     }
 
     pub async fn delete_folder(&self, id: String) -> Result<(), String> {
-        sqlx::query("DELETE FROM folders WHERE id = ?1")
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as i64;
+
+        sqlx::query("UPDATE folders SET is_deleted = 1, updated_at = ?1 WHERE id = ?2")
+            .bind(now)
             .bind(id)
             .execute(&self.pool)
             .await
             .map(|_| ())
             .map_err(|e| e.to_string())
+    }
+
+    pub async fn get_sync_data(
+        &self,
+        since: i64,
+    ) -> Result<(Vec<NoteRecord>, Vec<FolderRecord>), String> {
+        let notes = sqlx::query_as::<_, NoteRecord>("SELECT * FROM notes WHERE updated_at > ?1")
+            .bind(since)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        let folders =
+            sqlx::query_as::<_, FolderRecord>("SELECT * FROM folders WHERE updated_at > ?1")
+                .bind(since)
+                .fetch_all(&self.pool)
+                .await
+                .map_err(|e| e.to_string())?;
+
+        Ok((notes, folders))
     }
 
     pub async fn search_notes(&self, query: String) -> Result<Vec<SearchResult>, String> {
@@ -158,6 +324,9 @@ pub async fn init_db(app_dir: std::path::PathBuf) -> Result<Pool<Sqlite>, sqlx::
             parent_id TEXT,
             workspace_id TEXT NOT NULL,
             created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL DEFAULT 0,
+            version INTEGER NOT NULL DEFAULT 1,
+            is_deleted BOOLEAN NOT NULL DEFAULT 0,
             color TEXT,
             FOREIGN KEY(parent_id) REFERENCES folders(id) ON DELETE CASCADE
         )",
@@ -174,7 +343,66 @@ pub async fn init_db(app_dir: std::path::PathBuf) -> Result<Pool<Sqlite>, sqlx::
             workspace_id TEXT NOT NULL,
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL,
+            version INTEGER NOT NULL DEFAULT 1,
+            is_deleted BOOLEAN NOT NULL DEFAULT 0,
             FOREIGN KEY(folder_id) REFERENCES folders(id) ON DELETE CASCADE
+        )",
+    )
+    .execute(&pool)
+    .await?;
+
+    // Migration: Add columns to notes if they don't exist
+    let note_info: Vec<(i64, String, String, i64, Option<String>, i64)> =
+        sqlx::query_as("PRAGMA table_info(notes)")
+            .fetch_all(&pool)
+            .await?;
+
+    if !note_info.iter().any(|c| c.1 == "version") {
+        sqlx::query("ALTER TABLE notes ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
+            .execute(&pool)
+            .await?;
+    }
+    if !note_info.iter().any(|c| c.1 == "is_deleted") {
+        sqlx::query("ALTER TABLE notes ADD COLUMN is_deleted BOOLEAN NOT NULL DEFAULT 0")
+            .execute(&pool)
+            .await?;
+    }
+
+    // Migration: Add columns to folders if they don't exist
+    let folder_info: Vec<(i64, String, String, i64, Option<String>, i64)> =
+        sqlx::query_as("PRAGMA table_info(folders)")
+            .fetch_all(&pool)
+            .await?;
+
+    if !folder_info.iter().any(|c| c.1 == "updated_at") {
+        sqlx::query("ALTER TABLE folders ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0")
+            .execute(&pool)
+            .await?;
+        // Initialize updated_at with created_at for existing folders
+        sqlx::query("UPDATE folders SET updated_at = created_at WHERE updated_at = 0")
+            .execute(&pool)
+            .await?;
+    }
+    if !folder_info.iter().any(|c| c.1 == "is_deleted") {
+        sqlx::query("ALTER TABLE folders ADD COLUMN is_deleted BOOLEAN NOT NULL DEFAULT 0")
+            .execute(&pool)
+            .await?;
+    }
+    if !folder_info.iter().any(|c| c.1 == "version") {
+        sqlx::query("ALTER TABLE folders ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
+            .execute(&pool)
+            .await?;
+    }
+
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS changes (
+            id TEXT PRIMARY KEY,
+            note_id TEXT NOT NULL,
+            old_content TEXT,
+            new_content TEXT,
+            timestamp INTEGER NOT NULL,
+            version INTEGER NOT NULL,
+            FOREIGN KEY(note_id) REFERENCES notes(id) ON DELETE CASCADE
         )",
     )
     .execute(&pool)
@@ -275,6 +503,37 @@ pub async fn search_notes(
     state.db.search_notes(query).await
 }
 
+#[tauri::command]
+pub async fn apply_remote_update_note(
+    state: tauri::State<'_, DbState>,
+    note: NoteRecord,
+) -> Result<(), String> {
+    state.db.apply_remote_update_note(note).await
+}
+
+#[tauri::command]
+pub async fn apply_remote_update_folder(
+    state: tauri::State<'_, DbState>,
+    folder: FolderRecord,
+) -> Result<(), String> {
+    state.db.apply_remote_update_folder(folder).await
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SyncDataResponse {
+    pub notes: Vec<NoteRecord>,
+    pub folders: Vec<FolderRecord>,
+}
+
+#[tauri::command]
+pub async fn get_sync_data(
+    state: tauri::State<'_, DbState>,
+    since: i64,
+) -> Result<SyncDataResponse, String> {
+    let (notes, folders) = state.db.get_sync_data(since).await?;
+    Ok(SyncDataResponse { notes, folders })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -292,6 +551,8 @@ mod tests {
                 parent_id TEXT,
                 workspace_id TEXT NOT NULL,
                 created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                is_deleted BOOLEAN NOT NULL DEFAULT 0,
                 color TEXT,
                 FOREIGN KEY(parent_id) REFERENCES folders(id) ON DELETE CASCADE
             )",
@@ -309,7 +570,24 @@ mod tests {
                 workspace_id TEXT NOT NULL,
                 created_at INTEGER NOT NULL,
                 updated_at INTEGER NOT NULL,
+                version INTEGER NOT NULL DEFAULT 1,
+                is_deleted BOOLEAN NOT NULL DEFAULT 0,
                 FOREIGN KEY(folder_id) REFERENCES folders(id) ON DELETE CASCADE
+            )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS changes (
+                id TEXT PRIMARY KEY,
+                note_id TEXT NOT NULL,
+                old_content TEXT,
+                new_content TEXT,
+                timestamp INTEGER NOT NULL,
+                version INTEGER NOT NULL,
+                FOREIGN KEY(note_id) REFERENCES notes(id) ON DELETE CASCADE
             )",
         )
         .execute(&pool)
@@ -331,6 +609,8 @@ mod tests {
             workspace_id: "default".to_string(),
             created_at: 1000,
             updated_at: 1000,
+            version: 1,
+            is_deleted: false,
         };
 
         db.upsert_note(note).await.unwrap();
@@ -352,6 +632,8 @@ mod tests {
             workspace_id: "default".to_string(),
             created_at: 1000,
             updated_at: 1000,
+            version: 1,
+            is_deleted: false,
         };
 
         db.upsert_note(note).await.unwrap();
@@ -371,7 +653,10 @@ mod tests {
             parent_id: None,
             workspace_id: "default".to_string(),
             created_at: 1000,
+            updated_at: 1000,
+            version: 1,
             color: None,
+            is_deleted: false,
         };
 
         db.upsert_folder(folder).await.unwrap();
@@ -379,5 +664,53 @@ mod tests {
         let folders = db.get_folders().await.unwrap();
         assert_eq!(folders.len(), 1);
         assert_eq!(folders[0].name, "Test Folder");
+    }
+
+    #[tokio::test]
+    async fn test_note_versioning() {
+        let db = setup_test_db().await;
+
+        let mut note = NoteRecord {
+            id: "version-note".to_string(),
+            title: "V1".to_string(),
+            content: "Content V1".to_string(),
+            folder_id: None,
+            workspace_id: "default".to_string(),
+            created_at: 1000,
+            updated_at: 1000,
+            version: 1,
+            is_deleted: false,
+        };
+
+        // First insert
+        db.upsert_note(note.clone()).await.unwrap();
+        let notes = db.get_notes().await.unwrap();
+        assert_eq!(notes[0].version, 1);
+
+        // Update
+        note.content = "Content V2".to_string();
+        note.updated_at = 2000;
+        db.upsert_note(note).await.unwrap();
+
+        let notes = db.get_notes().await.unwrap();
+        assert_eq!(notes[0].version, 2);
+        assert_eq!(notes[0].content, "Content V2");
+
+        // Check history
+        // We use a query to check the changes table
+        let changes: Vec<(Option<String>, String, i32)> =
+            sqlx::query_as::<_, (Option<String>, String, i32)>(
+                "SELECT old_content, new_content, version FROM changes ORDER BY version ASC",
+            )
+            .fetch_all(&db.pool)
+            .await
+            .unwrap();
+
+        assert_eq!(changes.len(), 2);
+        assert_eq!(changes[0].1, "Content V1");
+        assert_eq!(changes[0].2, 1);
+        assert_eq!(changes[1].0, Some("Content V1".to_string()));
+        assert_eq!(changes[1].1, "Content V2");
+        assert_eq!(changes[1].2, 2);
     }
 }

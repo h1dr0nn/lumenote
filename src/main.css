@@ -6,7 +6,6 @@
   --color-app-sidebar: rgba(255, 255, 255, 0.72);
   --color-app-hover: #f1f3f6;
   --color-app-active: #e9eef5;
-  color-scheme: light;
 
   --color-accent: #4f7df3;
   --color-accent-soft: rgba(79, 125, 243, 0.12);
@@ -16,6 +15,17 @@
   --color-text-secondary: #6b7280;
   --color-text-muted: #9ca3af;
   --color-text-accent: #2563eb;
+  
+  /* Lumenote Editorial Palette - Light */
+  --syntax-h1-h6: #111827;
+  --syntax-keyword: #7c3aed;
+  --syntax-string: #059669;
+  --syntax-comment: #9ca3af;
+  --syntax-link: #2563eb;
+  --syntax-markup: #f59e0b;
+  --syntax-meta: #9ca3af;
+  --syntax-special: #db2777;
+  --syntax-hr: rgba(0, 0, 0, 0.08);
 
   --color-border-subtle: rgba(0, 0, 0, 0.06);
   --color-border-muted: rgba(0, 0, 0, 0.04);
@@ -52,6 +62,18 @@
   --color-text-primary: #e8eaed;
   --color-text-secondary: #9ca3af;
   --color-text-muted: #6b7280;
+  --color-text-accent: #93c5fd;
+  
+  /* Lumenote Editorial Palette - Dark */
+  --syntax-h1-h6: #ffffff;
+  --syntax-keyword: #a78bfa;
+  --syntax-string: #34d399;
+  --syntax-comment: #6b7280;
+  --syntax-link: #60a5fa;
+  --syntax-markup: #fbbf24;
+  --syntax-meta: #4b5563;
+  --syntax-special: #f472b6;
+  --syntax-hr: rgba(255, 255, 255, 0.12);
 
   --color-border-subtle: rgba(255, 255, 255, 0.06);
   --color-border-muted: rgba(255, 255, 255, 0.04);
@@ -61,6 +83,7 @@
 }
 
 :root {
+  color-scheme: light;
   font-family: var(--font-ui);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -101,6 +124,10 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-text-muted);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 .no-scrollbar::-webkit-scrollbar {

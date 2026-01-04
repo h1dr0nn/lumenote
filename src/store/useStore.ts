@@ -12,21 +12,26 @@ interface AppState {
     activeWorkspaceId: string;
     viewMode: ViewMode;
     editorView: EditorView | null;
-    activePopup: 'share' | 'settings' | 'workspace_create' | null;
+    activePopup: 'share' | 'settings' | 'sync' | 'workspace_create' | null;
     searchResults: SearchResult[];
+    unsavedNoteIds: Set<string>;
 
     // Settings
     theme: 'light' | 'dark' | 'system';
     fontPreset: 'sans' | 'serif' | 'mono';
     fontSize: number;
     language: 'vi' | 'en';
+    syncUrl: string;
+    syncKey: string;
+    lastSyncedAt: number | null;
+    isSyncing: boolean;
 
     setNotes: (notes: Note[]) => void;
     setActiveNoteId: (id: string | null) => void;
     setActiveWorkspaceId: (id: string) => void;
     setViewMode: (mode: ViewMode) => void;
     setEditorView: (view: EditorView | null) => void;
-    setActivePopup: (popup: 'share' | 'settings' | 'workspace_create' | null) => void;
+    setActivePopup: (popup: 'share' | 'settings' | 'sync' | 'workspace_create' | null) => void;
     setTheme: (theme: 'light' | 'dark' | 'system') => void;
     setFontPreset: (preset: 'sans' | 'serif' | 'mono') => void;
     setFontSize: (size: number) => void;
@@ -45,6 +50,9 @@ interface AppState {
     renameFolder: (id: string, name: string) => void;
     setNoteColor: (id: string, color: string | null) => void;
     setFolderColor: (id: string, color: string | null) => void;
+    setSyncConfig: (url: string, key: string) => void;
+    setSyncing: (syncing: boolean) => void;
+    performSync: () => Promise<void>;
 
     reorderNotes: (activeId: string, overId: string) => void;
     reorderFolders: (activeId: string, overId: string) => void;
@@ -54,8 +62,11 @@ interface AppState {
     searchNotes: (query: string) => Promise<void>;
     setSearchResults: (results: SearchResult[]) => void;
 
+    saveNote: (id: string) => Promise<void>;
     initialize: () => Promise<void>;
 }
+
+let saveTimeout: ReturnType<typeof setTimeout> | null = null;
 
 export const useStore = create<AppState>((set, get) => ({
     notes: [],
@@ -74,10 +85,15 @@ export const useStore = create<AppState>((set, get) => ({
     editorView: null,
     activePopup: null,
     searchResults: [],
+    unsavedNoteIds: new Set(),
     theme: 'system',
     fontPreset: 'sans',
     fontSize: 16,
     language: 'en',
+    syncUrl: '',
+    syncKey: '',
+    lastSyncedAt: null,
+    isSyncing: false,
 
     initialize: async () => {
         try {
@@ -86,6 +102,19 @@ export const useStore = create<AppState>((set, get) => ({
                 api.getFolders()
             ]);
 
+            const folders: Folder[] = foldersRecords.map(r => ({
+                id: r.id,
+                name: r.name,
+                parentId: r.parent_id,
+                workspaceId: r.workspace_id,
+                createdAt: r.created_at,
+                updatedAt: r.updated_at,
+                version: r.version,
+                color: r.color || undefined,
+                isExpanded: true,
+            }));
+            
+            // Fix notes mappings too to include all fields if needed
             const notes: Note[] = notesRecords.map(r => ({
                 id: r.id,
                 title: r.title,
@@ -94,16 +123,8 @@ export const useStore = create<AppState>((set, get) => ({
                 workspaceId: r.workspace_id,
                 createdAt: r.created_at,
                 updatedAt: r.updated_at,
-            }));
-
-            const folders: Folder[] = foldersRecords.map(r => ({
-                id: r.id,
-                name: r.name,
-                parentId: r.parent_id,
-                workspaceId: r.workspace_id,
-                createdAt: r.created_at,
-                color: r.color || undefined,
-                isExpanded: true, // Default expanded for now
+                version: r.version,
+                is_deleted: r.is_deleted, // although they shouldn't be here
             }));
 
             set({ notes, folders });
@@ -113,7 +134,32 @@ export const useStore = create<AppState>((set, get) => ({
     },
 
     setNotes: (notes) => set({ notes }),
-    setActiveNoteId: (id) => set({ activeNoteId: id }),
+    setActiveNoteId: (id) => {
+        // Flush pending save if exists
+        if (saveTimeout) {
+            clearTimeout(saveTimeout);
+            // We could just execute the save logic here, but to avoid duplication
+            // let's define a helper or just trigger the logic if we have an active ID.
+            const currentId = get().activeNoteId;
+            if (currentId && get().unsavedNoteIds.has(currentId)) {
+                const note = get().notes.find(n => n.id === currentId);
+                if (note) {
+                    api.upsertNote({
+                        id: note.id,
+                        title: note.title,
+                        content: note.content,
+                        folder_id: note.folderId || null,
+                        workspace_id: note.workspaceId,
+                        created_at: note.createdAt,
+                        updated_at: note.updatedAt,
+                        version: note.version,
+                    }).catch(console.error);
+                }
+            }
+            saveTimeout = null;
+        }
+        set({ activeNoteId: id });
+    },
     setActiveWorkspaceId: (id) => set({ activeWorkspaceId: id }),
     setViewMode: (mode) => set({ viewMode: mode }),
     setEditorView: (view) => set({ editorView: view }),
@@ -122,26 +168,97 @@ export const useStore = create<AppState>((set, get) => ({
     setFontPreset: (fontPreset) => set({ fontPreset }),
     setFontSize: (fontSize) => set({ fontSize }),
     setLanguage: (language) => set({ language }),
+    setSyncConfig: (syncUrl, syncKey) => set({ syncUrl, syncKey }),
+    setSyncing: (isSyncing) => set({ isSyncing }),
+    performSync: async () => {
+        const { syncUrl, syncKey, lastSyncedAt, setSyncing } = get();
+        if (!syncUrl || !syncKey) return;
 
-    updateNoteContent: (id, content) => {
-        set((state) => {
-            const notes = state.notes.map((note) =>
-                note.id === id ? { ...note, content, updatedAt: Date.now() } : note
-            );
-            const updatedNote = notes.find(n => n.id === id);
-            if (updatedNote) {
-                api.upsertNote({
-                    id: updatedNote.id,
-                    title: updatedNote.title,
-                    content: updatedNote.content,
-                    folder_id: updatedNote.folderId || null,
-                    workspace_id: updatedNote.workspaceId,
-                    created_at: updatedNote.createdAt,
-                    updated_at: updatedNote.updatedAt,
-                });
+        setSyncing(true);
+        try {
+            // 1. Get local changes since last sync
+            const since = lastSyncedAt || 0;
+            const localData = await api.getSyncData(since);
+
+            // 2. Send to server and get remote updates
+            const remoteData = await api.syncWithServer(syncUrl, syncKey, {
+                last_sync_time: since,
+                notes: localData.notes,
+                folders: localData.folders,
+            });
+
+            // 3. Apply remote updates locally
+            for (const note of remoteData.notes) {
+                await api.applyRemoteUpdateNote(note);
             }
-            return { notes };
-        });
+            for (const folder of remoteData.folders) {
+                await api.applyRemoteUpdateFolder(folder);
+            }
+
+            // 4. Refresh local state
+            await get().initialize();
+
+            set({ lastSyncedAt: remoteData.server_time });
+            console.log('Sync successful, server time:', remoteData.server_time);
+        } catch (error) {
+            console.error('Sync failed:', error);
+            // Optionally show toast or update UI state
+        } finally {
+            setSyncing(false);
+        }
+    },
+
+    updateNoteContent: async (id, content) => {
+        // Clear any existing timeout
+        if (saveTimeout) {
+            clearTimeout(saveTimeout);
+            saveTimeout = null;
+        }
+
+        set((state) => ({
+            notes: state.notes.map((note) =>
+                note.id === id ? { ...note, content } : note
+            ),
+            unsavedNoteIds: new Set(state.unsavedNoteIds).add(id)
+        }));
+
+        // Set new debounced timeout (5 seconds)
+        saveTimeout = setTimeout(async () => {
+            const updatedNote = get().notes.find(n => n.id === id);
+            if (updatedNote) {
+                try {
+                    await api.upsertNote({
+                        id: updatedNote.id,
+                        title: updatedNote.title,
+                        content: updatedNote.content,
+                        folder_id: updatedNote.folderId || null,
+                        workspace_id: updatedNote.workspaceId,
+                        created_at: updatedNote.createdAt,
+                        updated_at: updatedNote.updatedAt,
+                        version: updatedNote.version,
+                    });
+                    
+                    // Refresh notes to get new version from backend after save
+                    const freshNotes = await api.getNotes();
+                    set({ 
+                        notes: freshNotes.map(r => ({
+                            id: r.id,
+                            title: r.title,
+                            content: r.content,
+                            folderId: r.folder_id,
+                            workspaceId: r.workspace_id,
+                            createdAt: r.created_at,
+                            updatedAt: r.updated_at,
+                            version: r.version,
+                        })),
+                        unsavedNoteIds: new Set([...get().unsavedNoteIds].filter(nodeId => nodeId !== id))
+                    });
+                    saveTimeout = null;
+                } catch (error) {
+                    console.error("Failed to save note:", error);
+                }
+            }
+        }, 5000);
     },
 
     addNote: (folderId = null) => {
@@ -154,11 +271,13 @@ export const useStore = create<AppState>((set, get) => ({
             workspaceId: state.activeWorkspaceId,
             createdAt: Date.now(),
             updatedAt: Date.now(),
+            version: 1,
         };
 
+        get().setActiveNoteId(newNote.id);
+        
         set((state) => ({
             notes: [...state.notes, newNote],
-            activeNoteId: newNote.id,
             viewMode: 'edit'
         }));
 
@@ -170,6 +289,7 @@ export const useStore = create<AppState>((set, get) => ({
             workspace_id: newNote.workspaceId,
             created_at: newNote.createdAt,
             updated_at: newNote.updatedAt,
+            version: newNote.version,
         });
         
         return newNote.id;
@@ -192,6 +312,8 @@ export const useStore = create<AppState>((set, get) => ({
             workspaceId: state.activeWorkspaceId,
             isExpanded: true,
             createdAt: Date.now(),
+            updatedAt: Date.now(),
+            version: 1,
         };
 
         set((state) => ({ folders: [...state.folders, newFolder] }));
@@ -202,6 +324,8 @@ export const useStore = create<AppState>((set, get) => ({
             parent_id: newFolder.parentId || null,
             workspace_id: newFolder.workspaceId,
             created_at: newFolder.createdAt,
+            updated_at: newFolder.updatedAt,
+            version: newFolder.version,
             color: newFolder.color || null,
         });
         
@@ -274,6 +398,10 @@ export const useStore = create<AppState>((set, get) => ({
             const notes = state.notes.map(n => n.id === id ? { ...n, title } : n);
             const updatedNote = notes.find(n => n.id === id);
             if (updatedNote) {
+                if (saveTimeout) {
+                    clearTimeout(saveTimeout);
+                    saveTimeout = null;
+                }
                 api.upsertNote({
                     id: updatedNote.id,
                     title: updatedNote.title,
@@ -282,6 +410,7 @@ export const useStore = create<AppState>((set, get) => ({
                     workspace_id: updatedNote.workspaceId,
                     created_at: updatedNote.createdAt,
                     updated_at: updatedNote.updatedAt,
+                    version: updatedNote.version,
                 });
             }
             return { notes };
@@ -299,6 +428,8 @@ export const useStore = create<AppState>((set, get) => ({
                     parent_id: updatedFolder.parentId || null,
                     workspace_id: updatedFolder.workspaceId,
                     created_at: updatedFolder.createdAt,
+                    updated_at: updatedFolder.updatedAt,
+                    version: updatedFolder.version,
                     color: updatedFolder.color || null,
                 });
             }
@@ -311,6 +442,10 @@ export const useStore = create<AppState>((set, get) => ({
             const notes = state.notes.map(n => n.id === id ? { ...n, color: color || undefined } : n);
             const updatedNote = notes.find(n => n.id === id);
             if (updatedNote) {
+                if (saveTimeout) {
+                    clearTimeout(saveTimeout);
+                    saveTimeout = null;
+                }
                 api.upsertNote({
                     id: updatedNote.id,
                     title: updatedNote.title,
@@ -319,6 +454,7 @@ export const useStore = create<AppState>((set, get) => ({
                     workspace_id: updatedNote.workspaceId,
                     created_at: updatedNote.createdAt,
                     updated_at: updatedNote.updatedAt,
+                    version: updatedNote.version,
                 });
             }
             return { notes };
@@ -336,6 +472,8 @@ export const useStore = create<AppState>((set, get) => ({
                     parent_id: updatedFolder.parentId || null,
                     workspace_id: updatedFolder.workspaceId,
                     created_at: updatedFolder.createdAt,
+                    updated_at: updatedFolder.updatedAt,
+                    version: updatedFolder.version,
                     color: updatedFolder.color || null,
                 });
             }
@@ -362,6 +500,10 @@ export const useStore = create<AppState>((set, get) => ({
             const notes = state.notes.map((n) => n.id === noteId ? { ...n, folderId } : n);
             const updatedNote = notes.find(n => n.id === noteId);
             if (updatedNote) {
+                if (saveTimeout) {
+                    clearTimeout(saveTimeout);
+                    saveTimeout = null;
+                }
                 api.upsertNote({
                     id: updatedNote.id,
                     title: updatedNote.title,
@@ -370,6 +512,7 @@ export const useStore = create<AppState>((set, get) => ({
                     workspace_id: updatedNote.workspaceId,
                     created_at: updatedNote.createdAt,
                     updated_at: updatedNote.updatedAt,
+                    version: updatedNote.version,
                 });
             }
             return { notes };
@@ -395,6 +538,8 @@ export const useStore = create<AppState>((set, get) => ({
                 parent_id: updatedFolder.parentId || null,
                 workspace_id: updatedFolder.workspaceId,
                 created_at: updatedFolder.createdAt,
+                updated_at: updatedFolder.updatedAt,
+                version: updatedFolder.version,
                 color: updatedFolder.color || null,
             });
         }
@@ -412,6 +557,46 @@ export const useStore = create<AppState>((set, get) => ({
         } catch (error) {
             console.error('Search failed:', error);
             set({ searchResults: [] });
+        }
+    },
+
+    saveNote: async (id) => {
+        if (saveTimeout) {
+            clearTimeout(saveTimeout);
+            saveTimeout = null;
+        }
+
+        const note = get().notes.find(n => n.id === id);
+        if (note && get().unsavedNoteIds.has(id)) {
+            try {
+                await api.upsertNote({
+                    id: note.id,
+                    title: note.title,
+                    content: note.content,
+                    folder_id: note.folderId || null,
+                    workspace_id: note.workspaceId,
+                    created_at: note.createdAt,
+                    updated_at: note.updatedAt,
+                    version: note.version,
+                });
+
+                const freshNotes = await api.getNotes();
+                set({
+                    notes: freshNotes.map(r => ({
+                        id: r.id,
+                        title: r.title,
+                        content: r.content,
+                        folderId: r.folder_id,
+                        workspaceId: r.workspace_id,
+                        createdAt: r.created_at,
+                        updatedAt: r.updated_at,
+                        version: r.version,
+                    })),
+                    unsavedNoteIds: new Set([...get().unsavedNoteIds].filter(nodeId => nodeId !== id))
+                });
+            } catch (error) {
+                console.error("Manual save failed:", error);
+            }
         }
     },
 

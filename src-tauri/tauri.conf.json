@@ -13,8 +13,8 @@
     "windows": [
       {
         "title": "Lumenote",
-        "width": 800,
-        "height": 600
+        "width": 1280,
+        "height": 720
       }
     ],
     "security": {
@@ -31,5 +31,13 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://raw.githubusercontent.com/h1dr0nn/lumenote/main/updater.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDNBNEQyNUQwRjQ2ODA5MTEKUldRUkNXajAwQ1ZOT21vdE5hd2FwWU42cHpMZFNZSk55UDlJbHEyc0xIaHU5SS9EY1RRZHQxSEYK"
+    }
   }
 }
