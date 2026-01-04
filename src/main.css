@@ -6,6 +6,7 @@
   --color-app-sidebar: rgba(255, 255, 255, 0.72);
   --color-app-hover: #f1f3f6;
   --color-app-active: #e9eef5;
+  color-scheme: light;
 
   --color-accent: #4f7df3;
   --color-accent-soft: rgba(79, 125, 243, 0.12);
@@ -46,6 +47,7 @@
   --color-app-sidebar: rgba(26, 27, 30, 0.8);
   --color-app-hover: #25262b;
   --color-app-active: #2c2e33;
+  color-scheme: dark;
 
   --color-text-primary: #e8eaed;
   --color-text-secondary: #9ca3af;
@@ -62,7 +64,10 @@
   font-family: var(--font-ui);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
+
+*, ::before, ::after {
+  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
 }
 
 body {
@@ -109,4 +114,12 @@ body {
 
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
+}
+
+.search-snippet mark {
+  background-color: var(--color-accent-soft);
+  color: var(--color-accent);
+  padding: 0 2px;
+  border-radius: 2px;
+  font-weight: 500;
 }

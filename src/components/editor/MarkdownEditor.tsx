@@ -1,5 +1,5 @@
 import { useEffect, useRef, useMemo } from 'react';
-import { EditorState } from '@codemirror/state';
+import { EditorState, EditorSelection, SelectionRange } from '@codemirror/state';
 import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { markdown, markdownKeymap } from '@codemirror/lang-markdown';
@@ -13,13 +13,86 @@ interface MarkdownEditorProps {
     onSelectionChange?: (selection: { from: number; to: number }) => void;
 }
 
+// Custom commands for shortcuts
+const toggleBold = (view: EditorView) => {
+    const { state, dispatch } = view;
+    const changes = state.changeByRange((range: SelectionRange) => {
+        const before = '**', after = '**';
+        const selectedText = state.doc.sliceString(range.from, range.to);
+        if (selectedText) {
+            return {
+                changes: [
+                    { from: range.from, insert: before },
+                    { from: range.to, insert: after }
+                ],
+                range: EditorSelection.range(range.from + before.length, range.to + before.length)
+            };
+        } else {
+            const placeholder = "text";
+            const insert = before + placeholder + after;
+            return {
+                changes: { from: range.from, insert },
+                range: EditorSelection.range(range.from + before.length, range.from + before.length + placeholder.length)
+            };
+        }
+    });
+    dispatch(state.update(changes, { scrollIntoView: true }));
+    return true;
+};
+
+const toggleItalic = (view: EditorView) => {
+    const { state, dispatch } = view;
+    const changes = state.changeByRange((range: SelectionRange) => {
+        const before = '_', after = '_';
+        const selectedText = state.doc.sliceString(range.from, range.to);
+        if (selectedText) {
+            return {
+                changes: [
+                    { from: range.from, insert: before },
+                    { from: range.to, insert: after }
+                ],
+                range: EditorSelection.range(range.from + before.length, range.to + before.length)
+            };
+        } else {
+            const placeholder = "text";
+            const insert = before + placeholder + after;
+            return {
+                changes: { from: range.from, insert },
+                range: EditorSelection.range(range.from + before.length, range.from + before.length + placeholder.length)
+            };
+        }
+    });
+    dispatch(state.update(changes, { scrollIntoView: true }));
+    return true;
+};
+
+const toggleHeading = (level: number) => (view: EditorView) => {
+    const { state, dispatch } = view;
+    const prefix = '#'.repeat(level) + ' ';
+    const changes = state.changeByRange((range: SelectionRange) => {
+        const line = state.doc.lineAt(range.from);
+        const lineText = line.text;
+        
+        if (lineText.startsWith(prefix)) return { range };
+
+        // If it starts with a different heading level, we might want to replace it, 
+        // but for now let's just prepend like the toolbar does.
+        return {
+            changes: { from: line.from, insert: prefix },
+            range: EditorSelection.range(range.from + prefix.length, range.to + prefix.length)
+        };
+    });
+    dispatch(state.update(changes, { scrollIntoView: true }));
+    return true;
+};
+
 // Custom style to keep editor text plain (no bold/italic rendering)
 const plainTextStyle = HighlightStyle.define([
     { tag: tags.strong, fontWeight: 'normal' },
     { tag: tags.emphasis, fontStyle: 'normal' },
 ]);
 
-// Custom theme matching Lumenote Design Tokens
+// ... (lumenoteTheme remains unchanged)
 const lumenoteTheme = EditorView.theme({
     "&": {
         fontSize: "var(--text-md)",
@@ -68,9 +141,6 @@ const lumenoteTheme = EditorView.theme({
 });
 
 export const MarkdownEditor = ({ value, onChange, onSelectionChange }: MarkdownEditorProps) => {
-    // ... (rest of logic)
-    // Actually I need to wrap the return in motion.div if I want it to be internally smooth? 
-    // Wait, I already wrapped it in App.tsx. I should just fix the gutter here.
     const { setEditorView } = useStore();
     const editorRef = useRef<HTMLDivElement>(null);
     const viewRef = useRef<EditorView | null>(null);
@@ -101,7 +171,15 @@ export const MarkdownEditor = ({ value, onChange, onSelectionChange }: MarkdownE
                 highlightActiveLine(),
                 highlightActiveLineGutter(),
                 history(),
-                keymap.of([...defaultKeymap, ...historyKeymap]),
+                keymap.of([
+                    { key: "Mod-b", run: toggleBold },
+                    { key: "Mod-i", run: toggleItalic },
+                    { key: "Mod-1", run: toggleHeading(1) },
+                    { key: "Mod-2", run: toggleHeading(2) },
+                    { key: "Mod-3", run: toggleHeading(3) },
+                    ...defaultKeymap, 
+                    ...historyKeymap
+                ]),
                 markdown(),
                 syntaxHighlighting(defaultHighlightStyle),
                 syntaxHighlighting(plainTextStyle),

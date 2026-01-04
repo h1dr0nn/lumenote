@@ -22,6 +22,13 @@ pub struct FolderRecord {
     pub color: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+pub struct SearchResult {
+    pub id: String,
+    pub title: String,
+    pub snippet: String,
+}
+
 pub struct Db {
     pub pool: Pool<Sqlite>,
 }
@@ -108,6 +115,23 @@ impl Db {
             .map(|_| ())
             .map_err(|e| e.to_string())
     }
+
+    pub async fn search_notes(&self, query: String) -> Result<Vec<SearchResult>, String> {
+        // Prepare FTS query (add * for prefix matching)
+        let fts_query = format!("{}*", query.replace("\"", "\"\""));
+
+        sqlx::query_as::<_, SearchResult>(
+            "SELECT id, title, snippet(notes_fts, 2, '<mark>', '</mark>', '...', 20) as snippet
+             FROM notes_fts
+             WHERE notes_fts MATCH ?1
+             ORDER BY rank
+             LIMIT 20",
+        )
+        .bind(fts_query)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| e.to_string())
+    }
 }
 
 pub struct DbState {
@@ -156,6 +180,57 @@ pub async fn init_db(app_dir: std::path::PathBuf) -> Result<Pool<Sqlite>, sqlx::
     .execute(&pool)
     .await?;
 
+    // FTS5 Table for search
+    sqlx::query(
+        "CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
+            id UNINDEXED,
+            title,
+            content,
+            tokenize='unicode61'
+        )",
+    )
+    .execute(&pool)
+    .await?;
+
+    // Triggers to keep FTS in sync
+    sqlx::query(
+        "CREATE TRIGGER IF NOT EXISTS notes_ai AFTER INSERT ON notes BEGIN
+            INSERT INTO notes_fts(id, title, content) VALUES (new.id, new.title, new.content);
+        END;",
+    )
+    .execute(&pool)
+    .await?;
+
+    sqlx::query(
+        "CREATE TRIGGER IF NOT EXISTS notes_ad AFTER DELETE ON notes BEGIN
+            DELETE FROM notes_fts WHERE id = old.id;
+        END;",
+    )
+    .execute(&pool)
+    .await?;
+
+    sqlx::query(
+        "CREATE TRIGGER IF NOT EXISTS notes_au AFTER UPDATE ON notes BEGIN
+            UPDATE notes_fts SET title = new.title, content = new.content WHERE id = new.id;
+        END;",
+    )
+    .execute(&pool)
+    .await?;
+
+    // Sync existing data if FTS is empty
+    let count: (i64,) = sqlx::query_as("SELECT count(*) FROM notes_fts")
+        .fetch_one(&pool)
+        .await
+        .unwrap_or((0,));
+
+    if count.0 == 0 {
+        sqlx::query(
+            "INSERT INTO notes_fts(id, title, content) SELECT id, title, content FROM notes",
+        )
+        .execute(&pool)
+        .await?;
+    }
+
     Ok(pool)
 }
 
@@ -190,6 +265,14 @@ pub async fn upsert_folder(
 #[tauri::command]
 pub async fn delete_folder(state: tauri::State<'_, DbState>, id: String) -> Result<(), String> {
     state.db.delete_folder(id).await
+}
+
+#[tauri::command]
+pub async fn search_notes(
+    state: tauri::State<'_, DbState>,
+    query: String,
+) -> Result<Vec<SearchResult>, String> {
+    state.db.search_notes(query).await
 }
 
 #[cfg(test)]

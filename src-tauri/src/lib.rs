@@ -1,8 +1,8 @@
 mod db;
 
 use db::{
-    delete_folder, delete_note, get_folders, get_notes, init_db, upsert_folder, upsert_note,
-    DbState,
+    delete_folder, delete_note, get_folders, get_notes, init_db, search_notes, upsert_folder,
+    upsert_note, DbState,
 };
 use tauri::Manager;
 
@@ -37,7 +37,8 @@ pub fn run() {
             delete_note,
             get_folders,
             upsert_folder,
-            delete_folder
+            delete_folder,
+            search_notes
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

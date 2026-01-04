@@ -20,6 +20,12 @@ export interface FolderRecord {
     color?: string | null;
 }
 
+export interface SearchResult {
+    id: string;
+    title: string;
+    snippet: string;
+}
+
 export const api = {
     getNotes: () => invoke<NoteRecord[]>('get_notes'),
     upsertNote: (note: NoteRecord) => invoke<void>('upsert_note', { note }),
@@ -28,4 +34,6 @@ export const api = {
     getFolders: () => invoke<FolderRecord[]>('get_folders'),
     upsertFolder: (folder: FolderRecord) => invoke<void>('upsert_folder', { folder }),
     deleteFolder: (id: string) => invoke<void>('delete_folder', { id }),
+
+    searchNotes: (query: string) => invoke<SearchResult[]>('search_notes', { query }),
 };

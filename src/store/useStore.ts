@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { Note, Folder, ViewMode, Workspace } from '../types';
 import { arrayMove } from '@dnd-kit/sortable';
 import { EditorView } from '@codemirror/view';
-import { api } from '../utils/api';
+import { api, SearchResult } from '../utils/api';
 
 interface AppState {
     notes: Note[];
@@ -13,6 +13,7 @@ interface AppState {
     viewMode: ViewMode;
     editorView: EditorView | null;
     activePopup: 'share' | 'settings' | 'workspace_create' | null;
+    searchResults: SearchResult[];
 
     // Settings
     theme: 'light' | 'dark' | 'system';
@@ -50,6 +51,9 @@ interface AppState {
     moveNoteToFolder: (noteId: string, folderId: string | null) => void;
     moveFolderToFolder: (folderId: string, targetFolderId: string | null) => void;
 
+    searchNotes: (query: string) => Promise<void>;
+    setSearchResults: (results: SearchResult[]) => void;
+
     initialize: () => Promise<void>;
 }
 
@@ -69,6 +73,7 @@ export const useStore = create<AppState>((set, get) => ({
     viewMode: 'view',
     editorView: null,
     activePopup: null,
+    searchResults: [],
     theme: 'system',
     fontPreset: 'sans',
     fontSize: 16,
@@ -395,4 +400,20 @@ export const useStore = create<AppState>((set, get) => ({
         }
         return { folders };
     }),
+
+    searchNotes: async (query) => {
+        if (!query.trim()) {
+            set({ searchResults: [] });
+            return;
+        }
+        try {
+            const results = await api.searchNotes(query);
+            set({ searchResults: results });
+        } catch (error) {
+            console.error('Search failed:', error);
+            set({ searchResults: [] });
+        }
+    },
+
+    setSearchResults: (results) => set({ searchResults: results }),
 }));

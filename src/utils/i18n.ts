@@ -74,6 +74,7 @@ export const translations = {
     alert_caution: "Cẩn trọng",
     start_writing: "Bắt đầu viết...",
     editor_placeholder: "Bắt đầu viết điều gì đó tuyệt vời...",
+    no_results: "Không tìm thấy kết quả nào",
   },
   en: {
     settings: "Settings",
@@ -148,6 +149,7 @@ export const translations = {
     alert_caution: "Caution",
     start_writing: "Start writing...",
     editor_placeholder: "Start writing something awesome...",
+    no_results: "No results found",
   }
 };
 

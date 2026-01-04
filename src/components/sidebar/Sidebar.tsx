@@ -1,7 +1,7 @@
 import { useStore } from "../../store/useStore";
-import { Plus } from "lucide-react";
-import { AnimatePresence } from "framer-motion";
-import { useState, useRef, useMemo } from "react";
+import { Plus, Search, X, FileText } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import { useState, useRef, useMemo, useEffect } from "react";
 import { t } from "../../utils/i18n";
 // ... (rest of imports)
 import {
@@ -55,6 +55,9 @@ export const Sidebar = () => {
         renameNote,
         renameFolder,
         renameWorkspace,
+        searchResults,
+        searchNotes,
+        setSearchResults,
         language
     } = useStore();
 
@@ -69,7 +72,41 @@ export const Sidebar = () => {
     const [dropTarget, setDropTarget] = useState<DragTarget>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editValue, setEditValue] = useState("");
+    const [searchQuery, setSearchQuery] = useState("");
     const expandTimerRef = useRef<any>(null);
+
+    // Debounced backend search
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            if (searchQuery.trim()) {
+                searchNotes(searchQuery);
+            } else {
+                setSearchResults([]);
+            }
+        }, 300);
+        return () => clearTimeout(timer);
+    }, [searchQuery, searchNotes, setSearchResults]);
+
+    // Filter notes by search query
+    const filteredNotes = useMemo(() => {
+        if (!searchQuery.trim()) return workspaceNotes;
+        const query = searchQuery.toLowerCase();
+        return workspaceNotes.filter(n => 
+            n.title.toLowerCase().includes(query) || 
+            n.content.toLowerCase().includes(query)
+        );
+    }, [workspaceNotes, searchQuery]);
+
+    const filteredFolders = useMemo(() => {
+        if (!searchQuery.trim()) return workspaceFolders;
+        // Show folders that match OR contain matching notes
+        const query = searchQuery.toLowerCase();
+        const notesInFolders = new Set(filteredNotes.map(n => n.folderId).filter(Boolean));
+        return workspaceFolders.filter(f => 
+            f.name.toLowerCase().includes(query) || 
+            notesInFolders.has(f.id)
+        );
+    }, [workspaceFolders, searchQuery, filteredNotes]);
 
     const sensors = useSensors(
         useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -285,8 +322,12 @@ export const Sidebar = () => {
     };
 
     const renderItems = (parentId: string | null, depth: number) => {
-        const childFolders = workspaceFolders.filter(f => f.parentId === parentId);
-        const childNotes = workspaceNotes.filter(n => n.folderId === parentId);
+        // Use filtered data when search is active, otherwise use full workspace data
+        const effectiveFolders = searchQuery.trim() ? filteredFolders : workspaceFolders;
+        const effectiveNotes = searchQuery.trim() ? filteredNotes : workspaceNotes;
+        
+        const childFolders = effectiveFolders.filter(f => f.parentId === parentId);
+        const childNotes = effectiveNotes.filter(n => n.folderId === parentId);
         // ... (rest of renderItems logic unchanged, except using workspaceFolders/workspaceNotes)
         const items: React.ReactNode[] = [];
         const isDropIntoFolder = dropTarget?.position === 'inside';
@@ -378,20 +419,70 @@ export const Sidebar = () => {
                 </div>
             </div>
 
-            <DndContext
-                sensors={sensors}
-                collisionDetection={smartCollisionDetection}
-                onDragStart={onDragStart}
-                onDragOver={onDragOver}
-                onDragEnd={onDragEnd}
-                onDragCancel={onDragCancel}
-                modifiers={[restrictToVerticalAxis, restrictToWindowEdges]}
-            >
-                <SortableContext items={allItemIds} strategy={verticalListSortingStrategy}>
-                    <div className="flex-1 overflow-y-auto px-2 py-2 space-y-0.5">
-                        {renderItems(null, 0)}
-                    </div>
-                </SortableContext>
+            {/* Search Bar */}
+            <div className="px-3 pb-3">
+                <div className="relative">
+                    <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+                    <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder={t('search', language)}
+                        className={`w-full bg-app-hover border border-transparent focus:border-accent rounded-md py-1.5 pl-8 text-sm text-text-primary placeholder:text-text-muted outline-none ${searchQuery ? 'pr-8' : 'pr-3'}`}
+                    />
+                    {searchQuery && (
+                        <button
+                            onClick={() => setSearchQuery('')}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded-full hover:bg-app-surface text-text-muted hover:text-text-primary transition-colors"
+                        >
+                            <X size={12} />
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            {searchQuery.trim() ? (
+                <div className="flex-1 overflow-y-auto px-3 py-2 space-y-2 no-scrollbar">
+                    {searchResults.length > 0 ? (
+                        searchResults.map(result => (
+                            <motion.div 
+                                initial={{ opacity: 0, y: 5 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                key={result.id} 
+                                onClick={() => setActiveNoteId(result.id)}
+                                className={`p-2 rounded-md cursor-pointer transition-all ${activeNoteId === result.id ? 'bg-accent-soft border-accent/20' : 'hover:bg-app-hover border-transparent'} border`}
+                            >
+                                <div className="flex items-center gap-2 mb-1">
+                                    <FileText size={14} className="text-accent" />
+                                    <span className="text-[13px] font-medium text-text-primary truncate">{result.title}</span>
+                                </div>
+                                <div 
+                                    className="text-[11px] text-text-secondary line-clamp-2 leading-relaxed search-snippet"
+                                    dangerouslySetInnerHTML={{ __html: result.snippet }}
+                                />
+                            </motion.div>
+                        ))
+                    ) : (
+                        <div className="text-center py-12 text-text-muted text-xs">
+                            {t('no_results', language)}
+                        </div>
+                    )}
+                </div>
+            ) : (
+                <DndContext
+                    sensors={sensors}
+                    collisionDetection={smartCollisionDetection}
+                    onDragStart={onDragStart}
+                    onDragOver={onDragOver}
+                    onDragEnd={onDragEnd}
+                    onDragCancel={onDragCancel}
+                    modifiers={[restrictToVerticalAxis, restrictToWindowEdges]}
+                >
+                    <SortableContext items={allItemIds} strategy={verticalListSortingStrategy}>
+                        <div className="flex-1 overflow-y-auto px-2 py-2 space-y-0.5">
+                            {renderItems(null, 0)}
+                        </div>
+                    </SortableContext>
 
                 <DragOverlay dropAnimation={{
                     duration: 150,
@@ -433,6 +524,7 @@ export const Sidebar = () => {
                     ) : null}
                 </DragOverlay>
             </DndContext>
+        )}
 
             {/* Footer switcher */}
             <div className="p-3 border-t border-border-muted flex flex-col gap-3 bg-app-sidebar">

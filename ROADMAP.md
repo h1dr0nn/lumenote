@@ -157,12 +157,12 @@ Triết lý cốt lõi:
 
 ### Tasks
 
-- [ ] Keyboard shortcuts (Cmd/Ctrl+B, I, etc.)
+- [x] Keyboard shortcuts (Cmd/Ctrl+B, I, etc.)
 - [x] Inline edit note title
 - [x] Note delete / move
-- [ ] Markdown text search
-- [ ] Simple text index (Rust side)
-- [ ] Search result snippet
+- [x] Markdown text search
+- [x] Simple text index (Rust side)
+- [x] Search result snippet
 
 ### Search rules
 
