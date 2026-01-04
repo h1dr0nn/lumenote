@@ -1,16 +1,31 @@
 import { create } from 'zustand';
 import { Note, Folder, ViewMode } from '../types';
 import { arrayMove } from '@dnd-kit/sortable';
+import { EditorView } from '@codemirror/view';
 
 interface AppState {
     notes: Note[];
     folders: Folder[];
     activeNoteId: string | null;
     viewMode: ViewMode;
+    editorView: EditorView | null;
+    activePopup: 'share' | 'settings' | null;
+
+    // Settings
+    theme: 'light' | 'dark' | 'system';
+    fontPreset: 'sans' | 'serif' | 'mono';
+    fontSize: number;
+    language: 'vi' | 'en';
 
     setNotes: (notes: Note[]) => void;
     setActiveNoteId: (id: string | null) => void;
     setViewMode: (mode: ViewMode) => void;
+    setEditorView: (view: EditorView | null) => void;
+    setActivePopup: (popup: 'share' | 'settings' | null) => void;
+    setTheme: (theme: 'light' | 'dark' | 'system') => void;
+    setFontPreset: (preset: 'sans' | 'serif' | 'mono') => void;
+    setFontSize: (size: number) => void;
+    setLanguage: (lang: 'vi' | 'en') => void;
     updateNoteContent: (id: string, content: string) => void;
     addNote: (folderId?: string | null) => void;
     deleteNote: (id: string) => void;
@@ -19,6 +34,8 @@ interface AppState {
     toggleFolder: (id: string, expanded?: boolean) => void;
     renameNote: (id: string, title: string) => void;
     renameFolder: (id: string, name: string) => void;
+    setNoteColor: (id: string, color: string | null) => void;
+    setFolderColor: (id: string, color: string | null) => void;
 
     reorderNotes: (activeId: string, overId: string) => void;
     reorderFolders: (activeId: string, overId: string) => void;
@@ -30,8 +47,8 @@ export const useStore = create<AppState>((set) => ({
     notes: [
         {
             id: '1',
-            title: 'Chào mừng bạn đến với Lumenote',
-            content: '# Chào mừng bạn đến với Lumenote\n\nĐây là ghi chú đầu tiên của bạn.',
+            title: 'Welcome to Lumenote',
+            content: '# Welcome to Lumenote\n\nThis is your first note.',
             folderId: null,
             createdAt: Date.now(),
             updatedAt: Date.now(),
@@ -40,10 +57,22 @@ export const useStore = create<AppState>((set) => ({
     folders: [],
     activeNoteId: '1',
     viewMode: 'view',
+    editorView: null,
+    activePopup: null,
+    theme: 'system',
+    fontPreset: 'sans',
+    fontSize: 16,
+    language: 'en',
 
     setNotes: (notes) => set({ notes }),
     setActiveNoteId: (id) => set({ activeNoteId: id }),
     setViewMode: (mode) => set({ viewMode: mode }),
+    setEditorView: (view) => set({ editorView: view }),
+    setActivePopup: (popup) => set({ activePopup: popup }),
+    setTheme: (theme) => set({ theme }),
+    setFontPreset: (fontPreset) => set({ fontPreset }),
+    setFontSize: (fontSize) => set({ fontSize }),
+    setLanguage: (language) => set({ language }),
 
     updateNoteContent: (id, content) => set((state) => ({
         notes: state.notes.map((note) =>
@@ -54,7 +83,7 @@ export const useStore = create<AppState>((set) => ({
     addNote: (folderId = null) => {
         const newNote: Note = {
             id: Math.random().toString(36).substring(2, 9),
-            title: 'Ghi chú mới',
+            title: 'New Note',
             content: '',
             folderId,
             createdAt: Date.now(),
@@ -98,8 +127,14 @@ export const useStore = create<AppState>((set) => ({
         notes: state.notes.map(n => n.id === id ? { ...n, title } : n)
     })),
 
-    renameFolder: (id, name) => set((state) => ({
+    renameFolder: (id: string, name: string) => set((state) => ({
         folders: state.folders.map(f => f.id === id ? { ...f, name } : f)
+    })),
+    setNoteColor: (id, color) => set((state) => ({
+        notes: state.notes.map(n => n.id === id ? { ...n, color: color || undefined } : n)
+    })),
+    setFolderColor: (id, color) => set((state) => ({
+        folders: state.folders.map(f => f.id === id ? { ...f, color: color || undefined } : f)
     })),
 
     reorderNotes: (activeId, overId) => set((state) => {

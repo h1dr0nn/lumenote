@@ -1,10 +1,12 @@
 import { useStore } from "../../store/useStore";
-import { Plus, Hash, Folder as FolderIcon, ChevronRight, FileText, FolderPlus, Trash2, Edit3 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
-import { useState, useRef, useEffect, useMemo, memo } from "react";
+import { Plus } from "lucide-react";
+import { AnimatePresence } from "framer-motion";
+import { useState, useRef, useMemo } from "react";
+import { t } from "../../utils/i18n";
+// ... (rest of imports)
 import {
     DndContext,
-    closestCenter,
+    closestCorners,
     KeyboardSensor,
     PointerSensor,
     useSensor,
@@ -18,73 +20,46 @@ import {
     SortableContext,
     sortableKeyboardCoordinates,
     verticalListSortingStrategy,
-    useSortable,
 } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import { restrictToVerticalAxis, restrictToWindowEdges } from "@dnd-kit/modifiers";
 
-// --- Types ---
-type ContextMenuType = { x: number; y: number; type: 'sidebar' | 'note' | 'folder'; itemId?: string };
-type DragTarget = { id: string; position: 'above' | 'inside' | 'below' } | null;
+import { Note, Folder } from "../../types";
+import { ContextMenuType, DragTarget } from "./types";
+import { isNote, isFolder, getItemDepth, getSubtreeMaxDepth } from "./utils";
 
-// --- Note Item ---
-const NoteItem = memo(({ note, isActive, isDragging, onClick, onContextMenu, depth = 0 }: any) => (
-    <div
-        onClick={onClick}
-        onContextMenu={onContextMenu}
-        className={`group flex items-center gap-2 px-3 py-1.5 rounded-sm cursor-pointer transition-colors select-none ${isDragging ? 'opacity-50' : isActive ? 'bg-accent-soft text-text-accent' : 'hover:bg-app-hover text-text-secondary'
-            }`}
-        style={{ paddingLeft: `${depth * 16 + 12}px` }}
-    >
-        <Hash size={14} className={isActive ? 'text-accent' : 'text-text-muted'} />
-        <span className="text-sm truncate font-medium">{note.title || "Ghi chú không tên"}</span>
-    </div>
-));
+// Components
+import { NoteItem } from "./components/NoteItem";
+import { FolderItem } from "./components/FolderItem";
+import { SortableItem } from "./components/SortableItem";
+import { DropdownMenu } from "./components/DropdownMenu";
+import { ContextMenu } from "./components/ContextMenu";
+import { FolderChildrenWrapper } from "./components/FolderChildrenWrapper";
 
-// --- Folder Item ---
-const FolderItem = memo(({ folder, isDragging, isDropTarget, onClick, onContextMenu, depth = 0, children }: any) => (
-    <div className="select-none">
-        <div
-            onClick={onClick}
-            onContextMenu={onContextMenu}
-            className={`group flex items-center gap-2 px-3 py-1.5 rounded-sm cursor-pointer transition-all ${isDragging ? 'opacity-50' : isDropTarget ? 'bg-accent-soft ring-2 ring-accent' : 'hover:bg-app-hover text-text-secondary'
-                }`}
-            style={{ paddingLeft: `${depth * 16 + 12}px` }}
-        >
-            <motion.div animate={{ rotate: folder.isExpanded ? 90 : 0 }} transition={{ duration: 0.15 }}>
-                <ChevronRight size={14} className={isDropTarget ? 'text-accent' : 'text-text-muted'} />
-            </motion.div>
-            <FolderIcon size={14} className={isDropTarget ? 'text-accent' : 'text-text-muted'} />
-            <span className="text-sm truncate font-medium flex-1">{folder.name}</span>
-        </div>
-        {folder.isExpanded && !isDragging && (
-            <div className="border-l border-border-muted/30 ml-5">{children}</div>
-        )}
-    </div>
-));
-
-// --- Sortable Wrapper ---
-const SortableItem = ({ id, children }: { id: string; children: React.ReactNode }) => {
-    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
-    return (
-        <div
-            ref={setNodeRef}
-            style={{ transform: CSS.Translate.toString(transform), transition, zIndex: isDragging ? 50 : 1, position: 'relative' }}
-            {...attributes}
-            {...listeners}
-        >
-            {children}
-        </div>
-    );
-};
-
-// --- MAIN SIDEBAR ---
 export const Sidebar = () => {
-    const { notes, folders, activeNoteId, setActiveNoteId, addNote, addFolder, toggleFolder, reorderNotes, reorderFolders, moveNoteToFolder, moveFolderToFolder } = useStore();
+    const { 
+        notes, 
+        folders, 
+        activeNoteId, 
+        setActiveNoteId, 
+        addNote, 
+        addFolder, 
+        toggleFolder, 
+        reorderNotes, 
+        reorderFolders, 
+        moveNoteToFolder, 
+        moveFolderToFolder,
+        renameNote,
+        renameFolder,
+        language
+    } = useStore();
+
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [contextMenu, setContextMenu] = useState<ContextMenuType | null>(null);
     const [draggedId, setDraggedId] = useState<string | null>(null);
+    const [draggedWidth, setDraggedWidth] = useState<number | null>(null);
     const [dropTarget, setDropTarget] = useState<DragTarget>(null);
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [editValue, setEditValue] = useState("");
     const expandTimerRef = useRef<any>(null);
 
     const sensors = useSensors(
@@ -92,50 +67,109 @@ export const Sidebar = () => {
         useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
     );
 
-    const isNote = (id: string) => notes.some(n => n.id === id);
-    const isFolder = (id: string) => folders.some(f => f.id === id);
+    const allItemIds = useMemo(() => {
+        const getVisualOrder = (parentId: string | null): string[] => {
+            const result: string[] = [];
+            folders.filter((f: Folder) => f.parentId === parentId).forEach((folder: Folder) => {
+                result.push(folder.id);
+                if (folder.isExpanded) result.push(...getVisualOrder(folder.id));
+            });
+            notes.filter((n: Note) => n.folderId === parentId).forEach((note: Note) => result.push(note.id));
+            return result;
+        };
+        return getVisualOrder(null);
+    }, [folders, notes]);
+
+    const smartCollisionDetection = (args: any) => {
+        const collisions = closestCorners(args);
+        if (collisions.length > 0) return collisions;
+
+        const { pointerCoordinates, droppableContainers } = args;
+        if (!pointerCoordinates || allItemIds.length === 0) return [];
+
+        const firstId = allItemIds[0];
+        const firstContainer = droppableContainers.find((c: any) => c.id === firstId);
+        if (firstContainer && pointerCoordinates.y < firstContainer.rect.top) {
+            return [{ id: firstId }];
+        }
+
+        const lastId = allItemIds[allItemIds.length - 1];
+        const lastContainer = droppableContainers.find((c: any) => c.id === lastId);
+        if (lastContainer && pointerCoordinates.y > lastContainer.rect.bottom) {
+            return [{ id: lastId }];
+        }
+
+        return [];
+    };
 
     const onDragStart = (event: DragStartEvent) => {
         const id = event.active.id as string;
         setDraggedId(id);
-        if (isFolder(id)) toggleFolder(id, false);
+        
+        const width = event.active.rect.current.initial?.width;
+        if (width) setDraggedWidth(width);
+        
+        if (isFolder(id, folders)) toggleFolder(id, false);
     };
 
     const onDragOver = (event: DragOverEvent) => {
         const { active, over } = event;
-        if (!over) { setDropTarget(null); return; }
+        if (!over) { 
+            if (expandTimerRef.current) { clearTimeout(expandTimerRef.current); expandTimerRef.current = null; }
+            setDropTarget(null);
+            return; 
+        }
 
         const overId = over.id as string;
         const activeId = active.id as string;
         if (activeId === overId) { setDropTarget(null); return; }
 
-        // Tính vị trí tương đối
-        const overRect = over.rect;
         const activeRect = active.rect.current.translated;
+        const overRect = over.rect;
         if (!activeRect) { setDropTarget(null); return; }
 
-        const yCenter = activeRect.top + activeRect.height / 2;
-        const relativeY = yCenter - overRect.top;
-        const height = overRect.height;
+        const activeTop = activeRect.top;
+        const activeHeight = activeRect.height;
+        const overTop = overRect.top;
+        const overHeight = overRect.height;
 
         let position: 'above' | 'inside' | 'below';
-        if (isFolder(overId)) {
-            // Folder: 25% trên = above, 50% giữa = inside, 25% dưới = below
-            if (relativeY < height * 0.25) position = 'above';
-            else if (relativeY > height * 0.75) position = 'below';
-            else position = 'inside';
+
+        if (isFolder(overId, folders)) {
+            const activeCenter = activeTop + activeHeight / 2;
+            
+            if (activeCenter < overTop + overHeight * 0.3) {
+                position = 'above';
+            } else {
+                const targetDepth = getItemDepth(overId, folders, notes);
+                const activeIsNote = isNote(activeId, notes);
+
+                if (activeIsNote) {
+                    if (targetDepth <= 1) position = 'inside';
+                    else position = 'above';
+                } else {
+                    if (targetDepth <= 1) position = 'inside';
+                    else position = 'above';
+                }
+            }
         } else {
-            // Note: 50% trên = above, 50% dưới = below
-            position = relativeY < height / 2 ? 'above' : 'below';
+            const activeCenter = activeTop + activeHeight / 2;
+            const overCenter = overTop + overHeight / 2;
+            position = activeCenter < overCenter ? 'above' : 'below';
         }
 
-        setDropTarget({ id: overId, position });
+        const newTarget = { id: overId, position };
+        if (JSON.stringify(newTarget) !== JSON.stringify(dropTarget)) {
+            setDropTarget(newTarget);
+        }
 
-        // Auto-expand folder after 500ms
-        if (isFolder(overId) && position === 'inside') {
+        if (isFolder(overId, folders) && position === 'inside') {
             const folder = folders.find(f => f.id === overId);
             if (folder && !folder.isExpanded && !expandTimerRef.current) {
-                expandTimerRef.current = setTimeout(() => toggleFolder(overId, true), 500);
+                expandTimerRef.current = setTimeout(() => {
+                    toggleFolder(overId, true);
+                    expandTimerRef.current = null;
+                }, 300);
             }
         } else {
             if (expandTimerRef.current) { clearTimeout(expandTimerRef.current); expandTimerRef.current = null; }
@@ -153,25 +187,25 @@ export const Sidebar = () => {
         const overId = over.id as string;
         const { position } = dropTarget;
         setDropTarget(null);
-
         if (activeId === overId) return;
 
-        const activeIsNote = isNote(activeId);
-        const overIsNote = isNote(overId);
-        const overIsFolder = isFolder(overId);
+        const activeIsNote = isNote(activeId, notes);
+        const overIsNote = isNote(overId, notes);
+        const overIsFolder = isFolder(overId, folders);
 
-        // 1. NHÉT VÀO FOLDER
         if (overIsFolder && position === 'inside') {
+            const targetDepth = getItemDepth(overId, folders, notes);
             if (activeIsNote) {
-                moveNoteToFolder(activeId, overId);
+                if (targetDepth <= 1) moveNoteToFolder(activeId, overId);
             } else {
-                moveFolderToFolder(activeId, overId);
+                const subtreeHeight = getSubtreeMaxDepth(activeId, folders);
+                if (targetDepth + 1 + subtreeHeight <= 2) {
+                    moveFolderToFolder(activeId, overId);
+                }
             }
             return;
         }
 
-        // 2. SẮP XẾP LẠI (REORDER)
-        // Xác định parent mới
         let newParentId: string | null = null;
         if (overIsNote) {
             const overNote = notes.find(n => n.id === overId);
@@ -181,20 +215,24 @@ export const Sidebar = () => {
             newParentId = overFolder?.parentId || null;
         }
 
-        // Di chuyển item đến parent mới nếu khác
         if (activeIsNote) {
             const activeNote = notes.find(n => n.id === activeId);
             if (activeNote?.folderId !== newParentId) {
-                moveNoteToFolder(activeId, newParentId);
+                const parentDepth = newParentId ? getItemDepth(newParentId, folders, notes) : -1;
+                if (parentDepth + 1 <= 2) {
+                    moveNoteToFolder(activeId, newParentId);
+                }
             }
-            // Reorder notes
             if (overIsNote) reorderNotes(activeId, overId);
         } else {
             const activeFolder = folders.find(f => f.id === activeId);
             if (activeFolder?.parentId !== newParentId) {
-                moveFolderToFolder(activeId, newParentId);
+                const parentDepth = newParentId ? getItemDepth(newParentId, folders, notes) : -1;
+                const subtreeHeight = getSubtreeMaxDepth(activeId, folders);
+                if (parentDepth + 1 + subtreeHeight <= 2) {
+                    moveFolderToFolder(activeId, newParentId);
+                }
             }
-            // Reorder folders
             if (overIsFolder) reorderFolders(activeId, overId);
         }
     };
@@ -205,40 +243,85 @@ export const Sidebar = () => {
         if (expandTimerRef.current) { clearTimeout(expandTimerRef.current); expandTimerRef.current = null; }
     };
 
-    // Render tree recursively
-    const renderItems = (parentId: string | null, depth: number): JSX.Element[] => {
+    const handleRenameStart = (id: string, initialValue: string) => {
+        setEditingId(id);
+        setEditValue(initialValue);
+        setContextMenu(null);
+    };
+
+    const handleRenameSave = () => {
+        if (!editingId) return;
+        const trimmed = editValue.trim();
+        if (trimmed) {
+            if (isNote(editingId, notes)) renameNote(editingId, trimmed);
+            else if (isFolder(editingId, folders)) renameFolder(editingId, trimmed);
+        }
+        setEditingId(null);
+    };
+
+    const handleRenameCancel = () => {
+        setEditingId(null);
+    };
+
+    const handleContextMenu = (e: React.MouseEvent, type: 'sidebar' | 'note' | 'folder', itemId?: string) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setContextMenu({ x: e.clientX, y: e.clientY, type, itemId });
+    };
+
+    const renderItems = (parentId: string | null, depth: number) => {
         const childFolders = folders.filter(f => f.parentId === parentId);
         const childNotes = notes.filter(n => n.folderId === parentId);
-        const items: JSX.Element[] = [];
+        const items: React.ReactNode[] = [];
+        const isDropIntoFolder = dropTarget?.position === 'inside';
 
-        childFolders.forEach(folder => {
+        childFolders.forEach((folder: Folder) => {
             const isDragging = draggedId === folder.id;
+            const isEditing = editingId === folder.id;
             const isDropTargetFolder = dropTarget?.id === folder.id && dropTarget.position === 'inside';
+            const folderChildren = renderItems(folder.id, depth + 1);
+            
             items.push(
-                <SortableItem key={folder.id} id={folder.id}>
-                    <FolderItem
-                        folder={folder}
-                        depth={depth}
-                        isDragging={isDragging}
-                        isDropTarget={isDropTargetFolder}
-                        onClick={(e: React.MouseEvent) => { e.stopPropagation(); toggleFolder(folder.id); }}
-                        onContextMenu={(e: React.MouseEvent) => handleContextMenu(e, 'folder', folder.id)}
-                    >
-                        {renderItems(folder.id, depth + 1)}
-                    </FolderItem>
-                </SortableItem>
+                <div key={folder.id} className="select-none">
+                    <SortableItem id={folder.id} disableAnimation={isDropIntoFolder} disabled={isEditing}>
+                        <FolderItem
+                            folder={folder}
+                            depth={depth}
+                            isDragging={isDragging}
+                            isDropTarget={isDropTargetFolder}
+                            isEditing={isEditing}
+                            editValue={editValue}
+                            onEditChange={setEditValue}
+                            onEditSave={handleRenameSave}
+                            onEditCancel={handleRenameCancel}
+                            onClick={(e: React.MouseEvent) => { e.stopPropagation(); toggleFolder(folder.id); }}
+                            onContextMenu={(e: React.MouseEvent) => handleContextMenu(e, 'folder', folder.id)}
+                        />
+                    </SortableItem>
+                    {!isDragging && folderChildren.length > 0 && (
+                        <FolderChildrenWrapper isExpanded={folder.isExpanded ?? false}>
+                            {folderChildren}
+                        </FolderChildrenWrapper>
+                    )}
+                </div>
             );
         });
 
-        childNotes.forEach(note => {
+        childNotes.forEach((note: Note) => {
             const isDragging = draggedId === note.id;
+            const isEditing = editingId === note.id;
             items.push(
-                <SortableItem key={note.id} id={note.id}>
+                <SortableItem key={note.id} id={note.id} disableAnimation={isDropIntoFolder} disabled={isEditing}>
                     <NoteItem
                         note={note}
                         depth={depth}
                         isActive={activeNoteId === note.id}
                         isDragging={isDragging}
+                        isEditing={isEditing}
+                        editValue={editValue}
+                        onEditChange={setEditValue}
+                        onEditSave={handleRenameSave}
+                        onEditCancel={handleRenameCancel}
                         onClick={(e: React.MouseEvent) => { e.stopPropagation(); setActiveNoteId(note.id); }}
                         onContextMenu={(e: React.MouseEvent) => handleContextMenu(e, 'note', note.id)}
                     />
@@ -249,27 +332,19 @@ export const Sidebar = () => {
         return items;
     };
 
-    const allItemIds = useMemo(() => [...folders.map(f => f.id), ...notes.map(n => n.id)], [folders, notes]);
-
-    const handleContextMenu = (e: React.MouseEvent, type: 'sidebar' | 'note' | 'folder', itemId?: string) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setContextMenu({ x: e.clientX, y: e.clientY, type, itemId });
-    };
-
     return (
         <div className="w-64 h-screen bg-app-sidebar border-r border-border-subtle flex flex-col" onContextMenu={(e) => handleContextMenu(e, 'sidebar')}>
             <div className="p-4 flex items-center justify-between">
                 <h1 className="font-semibold text-text-primary tracking-tight">Lumenote</h1>
                 <div className="relative">
                     <button onClick={() => setDropdownOpen(!dropdownOpen)} className="p-1.5 rounded-sm hover:bg-app-hover text-text-secondary transition-colors"><Plus size={18} /></button>
-                    <DropdownMenu isOpen={dropdownOpen} onClose={() => setDropdownOpen(false)} onNewFile={() => addNote()} onNewFolder={() => addFolder('Thư mục mới')} />
+                    <DropdownMenu isOpen={dropdownOpen} onClose={() => setDropdownOpen(false)} onNewFile={() => addNote()} onNewFolder={() => addFolder(t('new_folder', language))} />
                 </div>
             </div>
 
             <DndContext
                 sensors={sensors}
-                collisionDetection={closestCenter}
+                collisionDetection={smartCollisionDetection}
                 onDragStart={onDragStart}
                 onDragOver={onDragOver}
                 onDragEnd={onDragEnd}
@@ -281,75 +356,61 @@ export const Sidebar = () => {
                         {renderItems(null, 0)}
                     </div>
                 </SortableContext>
+
+                <DragOverlay dropAnimation={{
+                    duration: 150,
+                    easing: 'cubic-bezier(0.25, 1, 0.5, 1)',
+                }}>
+                    {draggedId ? (
+                        (() => {
+                            const depth = getItemDepth(draggedId, folders, notes);
+                            const draggedNote = notes.find(n => n.id === draggedId);
+                            const draggedFolder = folders.find(f => f.id === draggedId);
+
+                            return (
+                                <div 
+                                    className="opacity-80 cursor-grabbing pointer-events-none shadow-lg ring-1 ring-black/5 rounded-sm overflow-hidden bg-app-surface scale-[1.02] transition-transform"
+                                    style={{ width: draggedWidth ? `${draggedWidth}px` : 'auto' }}
+                                >
+                                    {draggedNote ? (
+                                        <NoteItem
+                                            note={draggedNote}
+                                            isActive={activeNoteId === draggedId}
+                                            isDragging={false}
+                                            depth={depth}
+                                            onClick={() => {}}
+                                            onContextMenu={() => {}}
+                                        />
+                                    ) : draggedFolder ? (
+                                        <FolderItem
+                                            folder={draggedFolder}
+                                            isDragging={false}
+                                            isDropTarget={false}
+                                            depth={depth}
+                                            onClick={() => {}}
+                                            onContextMenu={() => {}}
+                                        />
+                                    ) : null}
+                                </div>
+                            );
+                        })()
+                    ) : null}
+                </DragOverlay>
             </DndContext>
 
             <div className="p-4 border-t border-border-muted text-xs text-text-muted">
-                {notes.length} ghi chú • {folders.length} thư mục
+                {t('all_item_count', language, { notes: notes.length, folders: folders.length })}
             </div>
 
             <AnimatePresence>
-                {contextMenu && <ContextMenu {...contextMenu} onClose={() => setContextMenu(null)} />}
+                {contextMenu && (
+                    <ContextMenu 
+                        {...contextMenu} 
+                        onClose={() => setContextMenu(null)} 
+                        onRename={(id: string, val: string) => handleRenameStart(id, val)}
+                    />
+                )}
             </AnimatePresence>
         </div>
     );
 };
-
-// --- Helper Components ---
-const DropdownMenu = memo(({ isOpen, onClose, onNewFile, onNewFolder }: any) => {
-    const ref = useRef<HTMLDivElement>(null);
-    useEffect(() => {
-        const handleClickOutside = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); };
-        if (isOpen) document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [isOpen, onClose]);
-
-    return (
-        <AnimatePresence>
-            {isOpen && (
-                <motion.div ref={ref} initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-                    className="absolute right-0 top-full mt-1 w-40 bg-app-surface border border-border-subtle rounded-md shadow-md z-50">
-                    <button onClick={() => { onNewFile(); onClose(); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-text-primary hover:bg-app-hover"><FileText size={14} /> Ghi chú mới</button>
-                    <button onClick={() => { onNewFolder(); onClose(); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-text-primary hover:bg-app-hover"><FolderPlus size={14} /> Thư mục mới</button>
-                </motion.div>
-            )}
-        </AnimatePresence>
-    );
-});
-
-const ContextMenu = memo(({ x, y, type, itemId, onClose }: ContextMenuType & { onClose: () => void }) => {
-    const { deleteNote, deleteFolder, addNote, addFolder } = useStore();
-    const ref = useRef<HTMLDivElement>(null);
-    const [pos, setPos] = useState({ x, y });
-
-    useEffect(() => {
-        if (ref.current) {
-            const rect = ref.current.getBoundingClientRect();
-            setPos({ x: Math.min(x, window.innerWidth - rect.width - 8), y: Math.min(y, window.innerHeight - rect.height - 8) });
-        }
-    }, [x, y]);
-
-    useEffect(() => { document.addEventListener('click', onClose); return () => document.removeEventListener('click', onClose); }, [onClose]);
-
-    const items = type === 'note' ? [
-        { icon: <Edit3 size={14} />, label: 'Đổi tên', action: () => { } },
-        { icon: <Trash2 size={14} />, label: 'Xoá', action: () => itemId && deleteNote(itemId), danger: true },
-    ] : type === 'folder' ? [
-        { icon: <FileText size={14} />, label: 'Ghi chú mới', action: () => itemId && addNote(itemId) },
-        { icon: <Edit3 size={14} />, label: 'Đổi tên', action: () => { } },
-        { icon: <Trash2 size={14} />, label: 'Xoá', action: () => itemId && deleteFolder(itemId), danger: true },
-    ] : [
-        { icon: <FileText size={14} />, label: 'Ghi chú mới', action: () => addNote() },
-        { icon: <FolderPlus size={14} />, label: 'Thư mục mới', action: () => addFolder('Thư mục mới') },
-    ];
-
-    return (
-        <motion.div ref={ref} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
-            style={{ left: pos.x, top: pos.y }} className="fixed bg-app-surface border border-border-subtle rounded-md shadow-md z-[100] min-w-[140px]">
-            {items.map((item, i) => (
-                <button key={i} onClick={() => { item.action(); onClose(); }} className={`w-full flex items-center gap-2 px-3 py-2 text-sm ${item.danger ? 'text-red-500 hover:bg-red-50' : 'text-text-primary hover:bg-app-hover'}`}>
-                    {item.icon} {item.label}
-                </button>
-            ))}
-        </motion.div>
-    );
-});

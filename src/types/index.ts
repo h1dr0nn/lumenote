@@ -6,6 +6,7 @@ export interface Note {
     index?: number;
     createdAt: number;
     updatedAt: number;
+    color?: string;
 }
 
 export interface Folder {
@@ -15,6 +16,7 @@ export interface Folder {
     index?: number;
     isExpanded?: boolean;
     createdAt: number;
+    color?: string;
 }
 
 export type ViewMode = 'edit' | 'view';

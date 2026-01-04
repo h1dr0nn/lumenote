@@ -1,5 +1,6 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkBreaks from 'remark-breaks';
 import { Copy, Check } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
@@ -70,12 +71,42 @@ export const Preview = ({ content }: PreviewProps) => {
     toast.success('Đã copy!');
   };
 
+  // Pre-process content to ensure all checkboxes are GFM-compliant and support bare [ ]
+  const processedContent = content
+    ? content
+        .replace(/^(\s*)\[( |x|X)\]/gm, '$1- [$2]') // Ensure bare [ ] becomes - [ ]
+        .replace(/^(\s*- \[( |x|X)\])(\s*)$/gm, '$1 \u200B') // Empty tasks: Add space + ZWS
+        .replace(/^(\s*- \[( |x|X)\])(?! |\u200B)/gm, '$1 ') // Tasks with text: Ensure literal space if missing
+    : "*Bắt đầu viết...*";
+
   return (
     <article className="markdown-preview">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfm, remarkBreaks]}
         components={{
           pre: ({ children }) => <>{children}</>,
+          li: ({ children, className, ...props }) => {
+            const isTask = className?.includes('task-list-item') || 
+                          (Array.isArray(children) && children.some(c => c?.props?.type === 'checkbox'));
+            return (
+              <li {...props} className={className + (isTask ? ' task-list-item' : '')}>
+                {children}
+              </li>
+            );
+          },
+          input: ({ type, checked, ...props }) => {
+            if (type === 'checkbox') {
+              return (
+                <input 
+                  type="checkbox" 
+                  checked={checked} 
+                  readOnly 
+                  {...props} 
+                />
+              );
+            }
+            return <input type={type} {...props} />;
+          },
           code: ({ children, className, ...props }) => {
             const match = /language-(\w+)/.exec(className || '');
             const isBlock = className?.includes('language-') ||
@@ -97,15 +128,17 @@ export const Preview = ({ content }: PreviewProps) => {
           }
         }}
       >
-        {content || "*Bắt đầu viết...*"}
+        {processedContent}
       </ReactMarkdown>
 
       <style>{`
         .markdown-preview {
-          font-family: var(--font-editor);
+          font-family: var(--font-preview);
           font-size: var(--text-md);
           line-height: 1.75;
           color: var(--color-text-primary);
+          max-width: 800px;
+          margin: 0;
         }
         
         .markdown-preview h1 { font-size: var(--text-xl); font-weight: 600; margin: 0.5em 0; }
@@ -193,6 +226,22 @@ export const Preview = ({ content }: PreviewProps) => {
         }
         .markdown-preview th { background: var(--color-app-hover); font-weight: 600; }
         .markdown-preview hr { border: none; border-top: 1px solid var(--color-border-subtle); margin: 1.5em 0; }
+
+        /* Task list / Checkbox styling */
+        .markdown-preview input[type="checkbox"] {
+          margin: 0 0.5em 0.25em 0;
+          vertical-align: middle;
+          width: 1.2em;
+          height: 1.2em;
+          accent-color: var(--color-accent);
+          cursor: pointer;
+        }
+        .markdown-preview .task-list-item {
+          list-style-type: none;
+        }
+        .markdown-preview ul.contains-task-list {
+          padding-left: 0;
+        }
       `}</style>
     </article>
   );

@@ -1,26 +1,28 @@
 @import "tailwindcss";
 
 @theme {
-  --color-app-bg: #F7F8FA;
-  --color-app-surface: #FFFFFF;
+  --color-app-bg: #f7f8fa;
+  --color-app-surface: #ffffff;
   --color-app-sidebar: rgba(255, 255, 255, 0.72);
-  --color-app-hover: #F1F3F6;
-  --color-app-active: #E9EEF5;
+  --color-app-hover: #f1f3f6;
+  --color-app-active: #e9eef5;
 
-  --color-accent: #4F7DF3;
+  --color-accent: #4f7df3;
   --color-accent-soft: rgba(79, 125, 243, 0.12);
-  --color-accent-hover: #3B6EEA;
+  --color-accent-hover: #3b6eea;
 
-  --color-text-primary: #1C1D1F;
-  --color-text-secondary: #6B7280;
-  --color-text-muted: #9CA3AF;
-  --color-text-accent: #2563EB;
+  --color-text-primary: #1c1d1f;
+  --color-text-secondary: #6b7280;
+  --color-text-muted: #9ca3af;
+  --color-text-accent: #2563eb;
 
   --color-border-subtle: rgba(0, 0, 0, 0.06);
   --color-border-muted: rgba(0, 0, 0, 0.04);
 
   --font-ui: "Inter", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   --font-editor: "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", "IBM Plex Mono", ui-monospace,
+    SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
   --text-xs: 12px;
   --text-sm: 13px;
@@ -38,10 +40,29 @@
   --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.08);
 }
 
+.dark {
+  --color-app-bg: #111214;
+  --color-app-surface: #1a1b1e;
+  --color-app-sidebar: rgba(26, 27, 30, 0.8);
+  --color-app-hover: #25262b;
+  --color-app-active: #2c2e33;
+
+  --color-text-primary: #e8eaed;
+  --color-text-secondary: #9ca3af;
+  --color-text-muted: #6b7280;
+
+  --color-border-subtle: rgba(255, 255, 255, 0.06);
+  --color-border-muted: rgba(255, 255, 255, 0.04);
+  
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
 :root {
   font-family: var(--font-ui);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
 }
 
 body {
@@ -51,6 +72,7 @@ body {
   min-height: 100vh;
   background-color: var(--color-app-bg);
   color: var(--color-text-primary);
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 #root {
