@@ -212,7 +212,7 @@ jobs:
 
           # Recursive Signature Extraction (Tauri v2)
           echo "Extracting signatures..."
-          
+
           # Use find with -print0 and read with IFS to handle filenames with spaces
           find src-tauri/target/$TARGET/release/bundle -name "*.sig" -print0 2>/dev/null | while IFS= read -r -d '' sig; do
             echo "Found signature file: $sig"
@@ -243,11 +243,11 @@ jobs:
               
               # Also create signature for our renamed updater files
               case "$binary_name" in
-                *_en-US.msi|*.msi)
+                *_en-US.msi|*.msi|*.msi.zip)
                   echo "$SIG_CONTENT" > "release-artifacts/lumenote-${VERSION}-windows-${ARCH}-updater.msi.zip.sig.txt"
                   echo "Created Windows updater signature"
                   ;;
-                *.AppImage)
+                *.AppImage|*.AppImage.tar.gz)
                   echo "$SIG_CONTENT" > "release-artifacts/lumenote-${VERSION}-linux-${ARCH}-updater.AppImage.tar.gz.sig.txt"
                   echo "Created Linux updater signature"
                   ;;
@@ -484,19 +484,19 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add updater.json
-          
+
           # Only commit if there are actual changes
           if git diff --staged --quiet; then
             echo "No changes in updater.json to commit."
             exit 0
           fi
-          
+
           git commit -m "chore: update updater.json for version ${{ steps.get_version.outputs.version }} [skip ci]"
-          
+
           # Fetch and rebase to avoid conflicts
           git fetch origin main
           git rebase origin/main
-          
+
           # Push specifically from HEAD to remote main branch
           git push origin HEAD:main
 
