@@ -162,7 +162,11 @@ jobs:
             # Find Windows Updater Bundle (Tauri may create .nsis.zip or .msi.zip)
             BUNDLE=$(find src-tauri/target/$TARGET/release/bundle -name "*.nsis.zip" -o -name "*.msi.zip" | head -n 1)
             if [ -n "$BUNDLE" ]; then
-              cp "$BUNDLE" "release-artifacts/lumenote-${VERSION}-windows-${ARCH}-updater.zip"
+              if [[ "$BUNDLE" == *".nsis.zip" ]]; then
+                cp "$BUNDLE" "release-artifacts/lumenote-${VERSION}-windows-${ARCH}-updater.nsis.zip"
+              else
+                cp "$BUNDLE" "release-artifacts/lumenote-${VERSION}-windows-${ARCH}-updater.msi.zip"
+              fi
             else
               # Fallback: Create updater bundle by zipping .msi file using 7z (available on Windows runner)
               MSI_FILE=$(find src-tauri/target/$TARGET/release/bundle -name "*.msi" | head -n 1)
@@ -246,6 +250,10 @@ jobs:
                 *_en-US.msi|*.msi|*.msi.zip)
                   echo "$SIG_CONTENT" > "release-artifacts/lumenote-${VERSION}-windows-${ARCH}-updater.msi.zip.sig.txt"
                   echo "Created Windows updater signature"
+                  ;;
+                *.nsis.zip)
+                  echo "$SIG_CONTENT" > "release-artifacts/lumenote-${VERSION}-windows-${ARCH}-updater.nsis.zip.sig.txt"
+                  echo "Created Windows updater signature (nsis)"
                   ;;
                 *.AppImage|*.AppImage.tar.gz)
                   echo "$SIG_CONTENT" > "release-artifacts/lumenote-${VERSION}-linux-${ARCH}-updater.AppImage.tar.gz.sig.txt"
