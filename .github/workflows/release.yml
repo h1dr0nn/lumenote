@@ -199,7 +199,7 @@ jobs:
 
           # Recursive Signature Extraction (Tauri v2)
           echo "Extracting signatures..."
-
+          
           # Use find with -print0 and read with IFS to handle filenames with spaces
           find src-tauri/target/$TARGET/release/bundle -name "*.sig" -print0 2>/dev/null | while IFS= read -r -d '' sig; do
             echo "Found signature file: $sig"

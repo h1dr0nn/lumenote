@@ -6,9 +6,11 @@ import { t } from '../../utils/i18n';
 
 import { getName, getVersion } from '@tauri-apps/api/app';
 import { useState, useEffect } from 'react';
+import { check } from '@tauri-apps/plugin-updater';
+import { toast } from 'sonner';
 
 export const SettingsPopup = () => {
-    const { 
+    const {
         activePopup, setActivePopup,
         theme, setTheme,
         fontPreset, setFontPreset,
@@ -18,6 +20,7 @@ export const SettingsPopup = () => {
 
     const [appVersion, setAppVersion] = useState<string>('');
     const [appName, setAppName] = useState<string>('Lumenote');
+    const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'available' | 'uptodate' | 'error'>('idle');
 
     useEffect(() => {
         const fetchAppInfo = async () => {
@@ -26,7 +29,7 @@ export const SettingsPopup = () => {
                 setAppVersion(v);
                 const n = await getName();
                 // Capitalize first letter if it defaults to lowercase 'lumenote'
-                setAppName(n.charAt(0).toUpperCase() + n.slice(1)); 
+                setAppName(n.charAt(0).toUpperCase() + n.slice(1));
             } catch (e) {
                 console.error('Failed to get app info', e);
                 setAppVersion('0.1.0'); // Fallback
@@ -34,6 +37,44 @@ export const SettingsPopup = () => {
         };
         fetchAppInfo();
     }, []);
+
+    const handleCheckUpdate = async () => {
+        if (updateStatus === 'checking') return;
+
+        setUpdateStatus('checking');
+        try {
+            const update = await check();
+            if (update) {
+                setUpdateStatus('available');
+                toast.success(t('update_available', language), {
+                    description: `v${update.version}`,
+                    action: {
+                        label: 'Update',
+                        onClick: () => update.downloadAndInstall()
+                    }
+                });
+            } else {
+                setUpdateStatus('uptodate');
+                toast.info(t('up_to_date', language));
+                setTimeout(() => setUpdateStatus('idle'), 3000);
+            }
+        } catch (error) {
+            console.error('Update check failed:', error);
+            setUpdateStatus('error');
+            toast.error(`${t('update_error', language)}: ${error}`);
+            setTimeout(() => setUpdateStatus('idle'), 3000);
+        }
+    };
+
+    const getUpdateLabel = () => {
+        switch (updateStatus) {
+            case 'checking': return t('checking_update', language);
+            case 'available': return t('update_available', language);
+            case 'uptodate': return t('up_to_date', language);
+            case 'error': return t('update_error', language);
+            default: return t('check_update', language);
+        }
+    };
 
     const segmentedControl = (
         options: { id: string, label: string, icon?: any }[],
@@ -46,15 +87,14 @@ export const SettingsPopup = () => {
                 <button
                     key={option.id}
                     onClick={() => onChange(option.id)}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-[11px] font-medium transition-colors relative z-10 ${
-                        currentValue === option.id 
-                            ? 'text-text-primary' 
-                            : 'text-text-muted hover:text-text-secondary'
-                    }`}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-[11px] font-medium transition-colors relative z-10 ${currentValue === option.id
+                        ? 'text-text-primary'
+                        : 'text-text-muted hover:text-text-secondary'
+                        }`}
                 >
                     {option.icon && <option.icon size={14} />}
                     {option.label}
-                    
+
                     {currentValue === option.id && (
                         <motion.div
                             layoutId={layoutId}
@@ -68,9 +108,9 @@ export const SettingsPopup = () => {
     );
 
     return (
-        <Modal 
-            isOpen={activePopup === 'settings'} 
-            onClose={() => setActivePopup(null)} 
+        <Modal
+            isOpen={activePopup === 'settings'}
+            onClose={() => setActivePopup(null)}
             title={t('settings', language)}
             maxWidth="450px"
         >
@@ -108,14 +148,14 @@ export const SettingsPopup = () => {
                                 <span className="text-sm font-medium text-text-primary">{t('font_size', language)}</span>
                             </div>
                             <div className="flex items-center gap-4">
-                                <button 
+                                <button
                                     onClick={() => setFontSize(Math.max(12, fontSize - 1))}
                                     className="p-1.5 hover:bg-app-active rounded-lg text-text-muted transition-colors"
                                 >
                                     <Minus size={16} />
                                 </button>
                                 <span className="text-sm font-mono font-medium w-8 text-center text-text-primary">{fontSize}px</span>
-                                <button 
+                                <button
                                     onClick={() => setFontSize(Math.min(24, fontSize + 1))}
                                     className="p-1.5 hover:bg-app-active rounded-lg text-text-muted transition-colors"
                                 >
@@ -148,11 +188,13 @@ export const SettingsPopup = () => {
                         <div className="flex items-center gap-3">
                             <span className="text-[10px] font-medium text-text-muted opacity-50">{appName} v{appVersion || '...'}</span>
                             <div className="w-px h-3 bg-border-muted/30" />
-                            <button 
-                                className="text-[10px] font-medium text-text-muted hover:text-accent transition-colors underline-offset-2 hover:underline"
-                                onClick={() => console.log('Check for update clicked')}
+                            <button
+                                className={`text-[10px] font-medium transition-colors underline-offset-2 hover:underline ${updateStatus === 'available' ? 'text-accent' : 'text-text-muted hover:text-accent'
+                                    } ${updateStatus === 'checking' ? 'opacity-50 cursor-wait' : ''}`}
+                                onClick={handleCheckUpdate}
+                                disabled={updateStatus === 'checking'}
                             >
-                                {t('check_update', language)}
+                                {getUpdateLabel()}
                             </button>
                         </div>
                         <span className="text-[10px] font-medium text-text-muted opacity-50">h1dr0n</span>

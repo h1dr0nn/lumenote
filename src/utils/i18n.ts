@@ -93,6 +93,10 @@ export const translations = {
     mode_edit: "Sửa",
     mode_view: "Xem",
     check_update: "Kiểm tra cập nhật",
+    checking_update: "Đang kiểm tra...",
+    update_available: "Có bản cập nhật mới!",
+    up_to_date: "Đã là bản mới nhất",
+    update_error: "Lỗi kiểm tra",
   },
   en: {
     settings: "Settings",
@@ -186,6 +190,10 @@ export const translations = {
     mode_edit: "Edit",
     mode_view: "View",
     check_update: "Check for Update",
+    checking_update: "Checking...",
+    update_available: "New version available!",
+    up_to_date: "Up to date",
+    update_error: "Update error",
   }
 };
 

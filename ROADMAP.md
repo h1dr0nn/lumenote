@@ -251,8 +251,8 @@ Triết lý cốt lõi:
 
 #### GitHub Actions
 
-- [ ] Workflow: Build Docker image → Push to GitHub Packages
-- [ ] Workflow: Build & Release App (Multi-platform)
+- [x] Workflow: Build Docker image → Push to GitHub Packages
+- [x] Workflow: Build & Release App (Multi-platform)
   - Matrix: Windows (x64), Linux (x64), macOS (Intel/Silicon)
   - Signing: Tauri v2 keys
   - Artifacts: Setup, portable (Windows), updater bundles
@@ -261,16 +261,16 @@ Triết lý cốt lõi:
 
 #### Tauri Updater
 
-- [ ] Generate Tauri v2 Signing Keys
-- [ ] Configure `tauri.conf.json` for updater
-- [ ] Create initial `updater.json` structure
+- [x] Generate Tauri v2 Signing Keys
+- [x] Configure `tauri.conf.json` for updater
+- [x] Create initial `updater.json` structure
 
 ### Done criteria
 
-- Commit tag `release-v*` → Tự động build, sign, update manifest và tạo release.
-- Đầy đủ artifacts cho Windows, Linux, macOS.
-- Nút "Check for update" trong app tải được version mới nhất.
-- Nút "Check for update" trong app hoạt động
+- [x] Commit tag `release-v*` → Tự động build, sign, update manifest và tạo release.
+- [x] Đầy đủ artifacts cho Windows, Linux, macOS.
+- [x] Nút "Check for update" trong app tải được version mới nhất.
+- [x] Nút "Check for update" trong app hoạt động
 
 ---
 
