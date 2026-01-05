@@ -199,6 +199,14 @@ jobs:
             BUNDLE=$(find src-tauri/target/$TARGET/release/bundle -name "*.app.tar.gz" | head -n 1)
             if [ -n "$BUNDLE" ]; then
               cp "$BUNDLE" "release-artifacts/lumenote-${VERSION}-macos-${ARCH}-updater.app.tar.gz"
+            else
+              # Fallback: Create updater bundle by compressing .app folder
+              APP_FOLDER=$(find src-tauri/target/$TARGET/release/bundle/macos -name "*.app" -type d | head -n 1)
+              if [ -n "$APP_FOLDER" ]; then
+                echo "Creating macOS updater bundle from .app folder..."
+                APP_NAME=$(basename "$APP_FOLDER")
+                tar -czvf "release-artifacts/lumenote-${VERSION}-macos-${ARCH}-updater.app.tar.gz" -C "$(dirname "$APP_FOLDER")" "$APP_NAME"
+              fi
             fi
           fi
 
