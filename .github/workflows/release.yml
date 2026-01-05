@@ -384,6 +384,10 @@ jobs:
           VERSION: ${{ steps.get_version.outputs.version }}
           TAG_NAME: ${{ github.ref_name }}
         run: |
+          # Fetch latest updater.json from main to avoid conflicts
+          git fetch origin main
+          git checkout origin/main -- updater.json
+
           node << 'EOF'
           const fs = require('fs');
           const updater = JSON.parse(fs.readFileSync('updater.json', 'utf8'));
