@@ -131,6 +131,7 @@ jobs:
           RAW_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
 
       - name: Build Tauri App
+        shell: bash
         run: |
           echo "Checking TAURI_SIGNING_PRIVATE_KEY state..."
           if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
