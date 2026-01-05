@@ -112,22 +112,21 @@ jobs:
             exit 1
           fi
 
-          # Strip everything except the base64 key (remove "untrusted comment:" line if present)
-          # Also remove any whitespace, newlines, carriage returns
-          BASE64_KEY=$(echo "$RAW_KEY" | grep -v "^untrusted comment:" | tr -d '[:space:]')
-
-          echo "Base64 key length: ${#BASE64_KEY} characters"
-          echo "Base64 key preview: ${BASE64_KEY:0:10}...${BASE64_KEY: -10}"
-
-          if [ -z "$BASE64_KEY" ]; then
-            echo "::error:: Could not extract base64 key from TAURI_SIGNING_PRIVATE_KEY."
-            exit 1
+          # If the key already has the minisign header, use it as is
+          # Otherwise, we might need to add it, but normally TAURI_SIGNING_PRIVATE_KEY 
+          # should be the full content of the .key file.
+          if echo "$RAW_KEY" | grep -q "^untrusted comment:"; then
+            echo "Detected full minisign private key."
+            echo "TAURI_SIGNING_PRIVATE_KEY<<EOF" >> $GITHUB_ENV
+            echo "$RAW_KEY" >> $GITHUB_ENV
+            echo "EOF" >> $GITHUB_ENV
+          else
+            # Strip whitespace and use as raw base64
+            BASE64_KEY=$(echo "$RAW_KEY" | tr -d '[:space:]')
+            echo "TAURI_SIGNING_PRIVATE_KEY=$BASE64_KEY" >> $GITHUB_ENV
           fi
 
-          # Pass base64 key only (no header)
-          echo "TAURI_SIGNING_PRIVATE_KEY=$BASE64_KEY" >> $GITHUB_ENV
-
-          echo "Signing key prepared successfully."
+          echo "Signing key prepared."
         env:
           RAW_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
 
@@ -205,34 +204,26 @@ jobs:
             echo "Found signature file: $sig"
             binary_name=$(basename "$sig" .sig)
             
-            # Debug: show file content
-            echo "=== Content of $sig ==="
-            cat "$sig"
-            echo ""
-            echo "=== End of $sig ==="
-            
-            # Try to extract signature - Tauri v2 .sig files may have different formats
-            # Format 1: minisign (line 1 = untrusted comment, line 2 = signature)
-            # Format 2: just base64 signature
-            
             if grep -q "^untrusted comment:" "$sig" 2>/dev/null; then
-              # Minisign format - extract line 2
               SIG_CONTENT=$(sed -n '2p' "$sig" | tr -d '\r\n')
             else
-              # Single line base64 format - use entire content
-              SIG_CONTENT=$(cat "$sig" | tr -d '\r\n')
+              SIG_CONTENT=$(cat "$sig" | tr -d '\r\n' | tr -d '[:space:]')
             fi
             
-            echo "Extracted signature (length=${#SIG_CONTENT}): ${SIG_CONTENT:0:50}..."
-            
             if [ -n "$SIG_CONTENT" ]; then
+              echo "Extracted signature (length=${#SIG_CONTENT})"
               echo "$SIG_CONTENT" > "release-artifacts/${binary_name}.sig.txt"
               
-              # Also create signature for our renamed updater files
+              # Map signatures to renamed updater files
+              # For Tauri v2, the sig might be for the .msi, .AppImage, or .app.tar.gz
               case "$binary_name" in
-                *_en-US.msi|*.msi)
+                *.msi)
                   echo "$SIG_CONTENT" > "release-artifacts/lumenote-${VERSION}-windows-${ARCH}-updater.msi.zip.sig.txt"
                   echo "Created Windows updater signature"
+                  ;;
+                *.nsis.zip)
+                  echo "$SIG_CONTENT" > "release-artifacts/lumenote-${VERSION}-windows-${ARCH}-updater.zip.sig.txt"
+                  echo "Created Windows NSIS updater signature"
                   ;;
                 *.AppImage)
                   echo "$SIG_CONTENT" > "release-artifacts/lumenote-${VERSION}-linux-${ARCH}-updater.AppImage.tar.gz.sig.txt"
@@ -243,19 +234,17 @@ jobs:
                   echo "Created macOS updater signature"
                   ;;
               esac
-            else
-              echo "WARNING: Empty signature content for $sig"
             fi
           done
 
-          # Create legacy signature fallback (also handle spaces in filename)
+          # Create legacy signature fallback for the Node.js script
           SIG_FILE=$(find src-tauri/target/$TARGET/release/bundle -name "*.sig" -print 2>/dev/null | head -n 1)
           if [ -n "$SIG_FILE" ]; then
             echo "Creating legacy signature from: $SIG_FILE"
             if grep -q "^untrusted comment:" "$SIG_FILE" 2>/dev/null; then
               sed -n '2p' "$SIG_FILE" | tr -d '\r\n' > "release-artifacts/${PLATFORM}-${ARCH}.legacy.sig.txt"
             else
-              cat "$SIG_FILE" | tr -d '\r\n' > "release-artifacts/${PLATFORM}-${ARCH}.legacy.sig.txt"
+              cat "$SIG_FILE" | tr -d '\r\n' | tr -d '[:space:]' > "release-artifacts/${PLATFORM}-${ARCH}.legacy.sig.txt"
             fi
           fi
 
@@ -418,25 +407,18 @@ jobs:
 
             const baseUrl = `https://github.com/${process.env.GITHUB_REPOSITORY}/releases/download/${tagName}`;
             
-            // 1. Find the updater binary with multiple fallbacks
-            let binaryFile = null;
+            // 1. Find the updater binary
+            let binaryFile = files.find(f => f.includes(`${key}-updater`)) || 
+                             files.find(f => f.includes(key) && f.includes('updater'));
             
-            // Try standardized naming first
-            binaryFile = files.find(f => f.includes(`${key}-updater`));
-            
-            // Fallback patterns for each platform
+            // Fallback for specific platforms if naming is inconsistent
             if (!binaryFile) {
                 if (updaterKey === 'windows-x86_64') {
-                    binaryFile = files.find(f => f.includes('windows') && f.endsWith('.nsis.zip'));
-                    if (!binaryFile) binaryFile = files.find(f => f.includes('windows') && f.endsWith('.msi.zip'));
-                    if (!binaryFile) binaryFile = files.find(f => f.includes('windows') && f.endsWith('.msi'));
+                    binaryFile = files.find(f => f.endsWith('.msi.zip')) || files.find(f => f.endsWith('.msi'));
                 } else if (updaterKey === 'linux-x86_64') {
-                    binaryFile = files.find(f => f.includes('linux') && f.endsWith('.AppImage.tar.gz'));
-                    if (!binaryFile) binaryFile = files.find(f => f.includes('linux') && f.endsWith('.AppImage'));
-                } else if (updaterKey === 'darwin-x86_64') {
-                    binaryFile = files.find(f => f.includes('macos-x64') && f.endsWith('.app.tar.gz'));
-                } else if (updaterKey === 'darwin-aarch64') {
-                    binaryFile = files.find(f => f.includes('macos-arm64') && f.endsWith('.app.tar.gz'));
+                    binaryFile = files.find(f => f.endsWith('.AppImage.tar.gz')) || files.find(f => f.endsWith('.AppImage'));
+                } else if (updaterKey.startsWith('darwin')) {
+                    binaryFile = files.find(f => f.includes(key) && f.endsWith('.app.tar.gz'));
                 }
             }
 
@@ -444,39 +426,29 @@ jobs:
                 updater.platforms[updaterKey].url = `${baseUrl}/${binaryFile}`;
                 console.log(`  Binary matched: ${binaryFile}`);
 
-                // 2. Find signature - try multiple patterns
+                // 2. Find signature
                 let sigContent = '';
                 
-                // Pattern 1: Exact match for renamed binary
-                const sigFileName = `${binaryFile}.sig.txt`;
-                const sigFilePath = `artifacts/${sigFileName}`;
-                if (fs.existsSync(sigFilePath)) {
-                    const content = fs.readFileSync(sigFilePath, 'utf8').trim();
-                    console.log(`  Checking ${sigFileName}: length=${content.length}, content="${content.substring(0, 50)}..."`);
-                    if (content) {
-                        sigContent = content;
-                        console.log(`  Signature loaded from: ${sigFileName}`);
-                    }
+                // Try specifically renamed sig file first
+                const specSigFile = `${binaryFile}.sig.txt`;
+                if (files.includes(specSigFile)) {
+                    sigContent = fs.readFileSync(`artifacts/${specSigFile}`, 'utf8').trim();
+                    console.log(`  Signature found in specific file: ${specSigFile}`);
                 }
                 
-                // Pattern 2: Legacy fallback (more reliable since it's created from Tauri's .sig files)
+                // Fallback to legacy signature
                 if (!sigContent) {
-                    const legacySigFile = `artifacts/${key}.legacy.sig.txt`;
-                    if (fs.existsSync(legacySigFile)) {
-                        const content = fs.readFileSync(legacySigFile, 'utf8').trim();
-                        console.log(`  Checking legacy ${key}.legacy.sig.txt: length=${content.length}, content="${content.substring(0, 50)}..."`);
-                        if (content) {
-                            sigContent = content;
-                            console.log(`  Signature loaded from legacy: ${key}.legacy.sig.txt`);
-                        }
+                    const legacySigFile = `${key}.legacy.sig.txt`;
+                    if (files.includes(legacySigFile)) {
+                        sigContent = fs.readFileSync(`artifacts/${legacySigFile}`, 'utf8').trim();
+                        console.log(`  Signature found in legacy file: ${legacySigFile}`);
                     }
                 }
 
                 if (sigContent) {
                     updater.platforms[updaterKey].signature = sigContent;
-                    console.log(`  SUCCESS: Signature set for ${updaterKey}`);
                 } else {
-                    console.log(`  WARNING: No signature content found for ${binaryFile}`);
+                    console.log(`  WARNING: No signature found for ${binaryFile}`);
                 }
             } else {
                 console.log(`  WARNING: No updater binary found for ${updaterKey}`);
