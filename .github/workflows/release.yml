@@ -112,28 +112,34 @@ jobs:
             exit 1
           fi
 
-          # If the key already has the minisign header, use it as is
-          # Otherwise, we might need to add it, but normally TAURI_SIGNING_PRIVATE_KEY 
-          # should be the full content of the .key file.
-          if echo "$RAW_KEY" | grep -q "^untrusted comment:"; then
-            echo "Detected full minisign private key."
-            echo "TAURI_SIGNING_PRIVATE_KEY<<EOF" >> $GITHUB_ENV
-            echo "$RAW_KEY" >> $GITHUB_ENV
-            echo "EOF" >> $GITHUB_ENV
+          # Clean the key: remove carriage returns and leading/trailing whitespace
+          CLEAN_KEY=$(echo "$RAW_KEY" | tr -d '\r' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+
+          if echo "$CLEAN_KEY" | grep -q "^untrusted comment:"; then
+            echo "Detected full minisign private key file."
+            # Use a more reliable way to set multiline secret
+            echo "TAURI_SIGNING_PRIVATE_KEY<<TAURI_EOF" >> $GITHUB_ENV
+            echo "$CLEAN_KEY" >> $GITHUB_ENV
+            echo "TAURI_EOF" >> $GITHUB_ENV
           else
-            # Strip whitespace and use as raw base64
-            BASE64_KEY=$(echo "$RAW_KEY" | tr -d '[:space:]')
+            echo "Detected raw base64 private key."
+            BASE64_KEY=$(echo "$CLEAN_KEY" | tr -d '[:space:]')
             echo "TAURI_SIGNING_PRIVATE_KEY=$BASE64_KEY" >> $GITHUB_ENV
           fi
-
           echo "Signing key prepared."
         env:
           RAW_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
 
       - name: Build Tauri App
-        run: npm run tauri build -- --target ${{ matrix.target }}
+        run: |
+          echo "Checking TAURI_SIGNING_PRIVATE_KEY state..."
+          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "TAURI_SIGNING_PRIVATE_KEY is present (length: ${#TAURI_SIGNING_PRIVATE_KEY})"
+          else
+            echo "WARNING: TAURI_SIGNING_PRIVATE_KEY is MISSING in build step environment!"
+          fi
+          npm run tauri build -- --target ${{ matrix.target }}
         env:
-          # TAURI_SIGNING_PRIVATE_KEY is now provided via GITHUB_ENV from the previous step
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
       - name: Rename and Prepare Artifacts
@@ -197,8 +203,11 @@ jobs:
           fi
 
           # Recursive Signature Extraction (Tauri v2)
+          echo "=== Debug: Listing ALL files in target bundle ==="
+          find src-tauri/target/$TARGET/release/bundle -type f || echo "No files found in bundle directory"
+          echo "=== End Debug ==="
+
           echo "Extracting signatures..."
-          
           # Use find with -print0 and read with IFS to handle filenames with spaces
           find src-tauri/target/$TARGET/release/bundle -name "*.sig" -print0 2>/dev/null | while IFS= read -r -d '' sig; do
             echo "Found signature file: $sig"
@@ -217,21 +226,21 @@ jobs:
               # Map signatures to renamed updater files
               # For Tauri v2, the sig might be for the .msi, .AppImage, or .app.tar.gz
               case "$binary_name" in
-                *.msi)
+                *.msi|*_en-US.msi)
                   echo "$SIG_CONTENT" > "release-artifacts/lumenote-${VERSION}-windows-${ARCH}-updater.msi.zip.sig.txt"
-                  echo "Created Windows updater signature"
+                  echo "Created Windows updater signature mapping"
                   ;;
                 *.nsis.zip)
                   echo "$SIG_CONTENT" > "release-artifacts/lumenote-${VERSION}-windows-${ARCH}-updater.zip.sig.txt"
-                  echo "Created Windows NSIS updater signature"
+                  echo "Created Windows NSIS updater signature mapping"
                   ;;
                 *.AppImage)
                   echo "$SIG_CONTENT" > "release-artifacts/lumenote-${VERSION}-linux-${ARCH}-updater.AppImage.tar.gz.sig.txt"
-                  echo "Created Linux updater signature"
+                  echo "Created Linux updater signature mapping"
                   ;;
                 *.app.tar.gz)
                   echo "$SIG_CONTENT" > "release-artifacts/lumenote-${VERSION}-macos-${ARCH}-updater.app.tar.gz.sig.txt"
-                  echo "Created macOS updater signature"
+                  echo "Created macOS updater signature mapping"
                   ;;
               esac
             fi
