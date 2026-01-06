@@ -34,7 +34,7 @@ Built with **Tauri** and **Rust**, Lumenote is incredibly lightweight and fast. 
 
 Lumenote is available for Windows, macOS, and Linux.
 
-- **[Windows Installer (.msi)](https://github.com/h1dr0nn/lumenote/releases/latest)**
+- **[Windows Installer (.msi / .exe)](https://github.com/h1dr0nn/lumenote/releases/latest)**
 - **[macOS (.dmg)](https://github.com/h1dr0nn/lumenote/releases/latest)**
 - **[Linux (.AppImage / .deb)](https://github.com/h1dr0nn/lumenote/releases/latest)**
 
