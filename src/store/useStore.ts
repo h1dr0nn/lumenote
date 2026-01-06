@@ -330,6 +330,7 @@ export const useStore = create<AppState>((set, get) => ({
             updated_at: newFolder.updatedAt,
             version: newFolder.version,
             color: newFolder.color || null,
+            is_deleted: false,
         });
 
         return newFolder.id;
@@ -435,6 +436,7 @@ export const useStore = create<AppState>((set, get) => ({
                     updated_at: updatedFolder.updatedAt,
                     version: updatedFolder.version,
                     color: updatedFolder.color || null,
+                    is_deleted: false,
                 });
             }
             return { folders };
@@ -480,6 +482,7 @@ export const useStore = create<AppState>((set, get) => ({
                     updated_at: updatedFolder.updatedAt,
                     version: updatedFolder.version,
                     color: updatedFolder.color || null,
+                    is_deleted: false,
                 });
             }
             return { folders };
@@ -547,6 +550,7 @@ export const useStore = create<AppState>((set, get) => ({
                 updated_at: updatedFolder.updatedAt,
                 version: updatedFolder.version,
                 color: updatedFolder.color || null,
+                is_deleted: false,
             });
         }
         return { folders };
