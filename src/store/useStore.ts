@@ -113,7 +113,7 @@ export const useStore = create<AppState>((set, get) => ({
                 color: r.color || undefined,
                 isExpanded: true,
             }));
-            
+
             // Fix notes mappings too to include all fields if needed
             const notes: Note[] = notesRecords.map(r => ({
                 id: r.id,
@@ -153,6 +153,7 @@ export const useStore = create<AppState>((set, get) => ({
                         created_at: note.createdAt,
                         updated_at: note.updatedAt,
                         version: note.version,
+                        is_deleted: false,
                     }).catch(console.error);
                 }
             }
@@ -236,11 +237,12 @@ export const useStore = create<AppState>((set, get) => ({
                         created_at: updatedNote.createdAt,
                         updated_at: updatedNote.updatedAt,
                         version: updatedNote.version,
+                        is_deleted: false,
                     });
-                    
+
                     // Refresh notes to get new version from backend after save
                     const freshNotes = await api.getNotes();
-                    set({ 
+                    set({
                         notes: freshNotes.map(r => ({
                             id: r.id,
                             title: r.title,
@@ -275,7 +277,7 @@ export const useStore = create<AppState>((set, get) => ({
         };
 
         get().setActiveNoteId(newNote.id);
-        
+
         set((state) => ({
             notes: [...state.notes, newNote],
             viewMode: 'edit'
@@ -290,8 +292,9 @@ export const useStore = create<AppState>((set, get) => ({
             created_at: newNote.createdAt,
             updated_at: newNote.updatedAt,
             version: newNote.version,
+            is_deleted: false,
         });
-        
+
         return newNote.id;
     },
 
@@ -328,7 +331,7 @@ export const useStore = create<AppState>((set, get) => ({
             version: newFolder.version,
             color: newFolder.color || null,
         });
-        
+
         return newFolder.id;
     },
 
@@ -344,10 +347,10 @@ export const useStore = create<AppState>((set, get) => ({
         const WORKSPACE_COLORS = ['#4F7DF3', '#E94F37', '#3CB371', '#FFA500', '#9370DB', '#FF69B4', '#20B2AA', '#778899'];
         const usedColors = get().workspaces.map(w => w.color);
         const availableColors = WORKSPACE_COLORS.filter(c => !usedColors.includes(c));
-        const randomColor = color || (availableColors.length > 0 
+        const randomColor = color || (availableColors.length > 0
             ? availableColors[Math.floor(Math.random() * availableColors.length)]
             : WORKSPACE_COLORS[Math.floor(Math.random() * WORKSPACE_COLORS.length)]);
-        
+
         const newWorkspace: Workspace = {
             id: Math.random().toString(36).substring(2, 9),
             name,
@@ -363,7 +366,7 @@ export const useStore = create<AppState>((set, get) => ({
     },
 
     setWorkspaceColor: (id, color) => set((state) => ({
-        workspaces: state.workspaces.map(w => 
+        workspaces: state.workspaces.map(w =>
             w.id === id ? { ...w, color: color || '#4F7DF3' } : w
         ),
     })),
@@ -373,7 +376,7 @@ export const useStore = create<AppState>((set, get) => ({
         const newWorkspaces = state.workspaces.filter(w => w.id !== id);
         const isActiveDeleting = state.activeWorkspaceId === id;
         const newActiveId = isActiveDeleting ? newWorkspaces[0].id : state.activeWorkspaceId;
-        
+
         return {
             workspaces: newWorkspaces,
             activeWorkspaceId: newActiveId,
@@ -411,6 +414,7 @@ export const useStore = create<AppState>((set, get) => ({
                     created_at: updatedNote.createdAt,
                     updated_at: updatedNote.updatedAt,
                     version: updatedNote.version,
+                    is_deleted: false,
                 });
             }
             return { notes };
@@ -455,6 +459,7 @@ export const useStore = create<AppState>((set, get) => ({
                     created_at: updatedNote.createdAt,
                     updated_at: updatedNote.updatedAt,
                     version: updatedNote.version,
+                    is_deleted: false,
                 });
             }
             return { notes };
@@ -513,6 +518,7 @@ export const useStore = create<AppState>((set, get) => ({
                     created_at: updatedNote.createdAt,
                     updated_at: updatedNote.updatedAt,
                     version: updatedNote.version,
+                    is_deleted: false,
                 });
             }
             return { notes };
@@ -528,7 +534,7 @@ export const useStore = create<AppState>((set, get) => ({
         };
         if (folderId === targetFolderId) return state;
         if (targetFolderId && isDescendant(folderId, targetFolderId)) return state;
-        
+
         const folders = state.folders.map((f) => f.id === folderId ? { ...f, parentId: targetFolderId } : f);
         const updatedFolder = folders.find(f => f.id === folderId);
         if (updatedFolder) {
@@ -567,7 +573,9 @@ export const useStore = create<AppState>((set, get) => ({
         }
 
         const note = get().notes.find(n => n.id === id);
-        if (note && get().unsavedNoteIds.has(id)) {
+        const hasUnsaved = get().unsavedNoteIds.has(id);
+
+        if (note && hasUnsaved) {
             try {
                 await api.upsertNote({
                     id: note.id,
@@ -578,6 +586,7 @@ export const useStore = create<AppState>((set, get) => ({
                     created_at: note.createdAt,
                     updated_at: note.updatedAt,
                     version: note.version,
+                    is_deleted: false,
                 });
 
                 const freshNotes = await api.getNotes();

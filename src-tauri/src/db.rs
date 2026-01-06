@@ -70,8 +70,8 @@ impl Db {
         };
 
         sqlx::query(
-            "INSERT INTO notes (id, title, content, folder_id, workspace_id, created_at, updated_at, version)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            "INSERT INTO notes (id, title, content, folder_id, workspace_id, created_at, updated_at, version, is_deleted)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
              ON CONFLICT(id) DO UPDATE SET
                 title = excluded.title,
                 content = excluded.content,

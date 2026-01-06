@@ -72,7 +72,7 @@ const toggleHeading = (level: number) => (view: EditorView) => {
     const changes = state.changeByRange((range: SelectionRange) => {
         const line = state.doc.lineAt(range.from);
         const lineText = line.text;
-        
+
         if (lineText.startsWith(prefix)) return { range };
 
         // If it starts with a different heading level, we might want to replace it, 
@@ -92,17 +92,17 @@ const modernHighlightStyle = HighlightStyle.define([
     { tag: tags.keyword, color: 'var(--syntax-keyword)' },
     { tag: tags.string, color: 'var(--syntax-string)' },
     { tag: tags.comment, color: 'var(--syntax-comment)', fontStyle: 'italic' },
-    
+
     // Link text stands out as primary blue
     { tag: [tags.link, tags.labelName], color: 'var(--syntax-link)' },
-    
+
     // Metadata like URLs, brackets, and punctuation are dimmed for clarity
     { tag: [tags.url, tags.punctuation, tags.separator, tags.bracket, tags.meta], color: 'var(--syntax-meta)' },
-    
+
     { tag: [tags.strong, tags.emphasis, tags.strikethrough], color: 'var(--syntax-markup)' },
     { tag: [tags.literal, tags.className, tags.tagName], color: 'var(--syntax-special)' },
     { tag: tags.contentSeparator, color: 'var(--syntax-hr)' },
-    
+
     // Reset formatting for a clean "plain text editor" feel where appropriate
     { tag: tags.strong, fontWeight: 'normal' },
     { tag: tags.emphasis, fontStyle: 'normal' },
@@ -190,17 +190,19 @@ export const MarkdownEditor = ({ value, onChange, onSelectionChange }: MarkdownE
                 keymap.of([
                     { key: "Mod-b", run: toggleBold },
                     { key: "Mod-i", run: toggleItalic },
-                    { key: "Mod-s", run: () => {
-                        const state = useStore.getState();
-                        if (state.activeNoteId) {
-                            state.saveNote(state.activeNoteId);
+                    {
+                        key: "Mod-s", run: () => {
+                            const state = useStore.getState();
+                            if (state.activeNoteId) {
+                                state.saveNote(state.activeNoteId);
+                            }
+                            return true;
                         }
-                        return true;
-                    }},
+                    },
                     { key: "Mod-1", run: toggleHeading(1) },
                     { key: "Mod-2", run: toggleHeading(2) },
                     { key: "Mod-3", run: toggleHeading(3) },
-                    ...defaultKeymap, 
+                    ...defaultKeymap,
                     ...historyKeymap
                 ]),
                 markdown(),

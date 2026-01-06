@@ -39,20 +39,20 @@ import { FolderChildrenWrapper } from "./components/FolderChildrenWrapper";
 import { WorkspaceSwitcher } from "./components/WorkspaceSwitcher";
 
 export const Sidebar = () => {
-    const { 
-        notes, 
-        folders, 
-        activeNoteId, 
+    const {
+        notes,
+        folders,
+        activeNoteId,
         activeWorkspaceId,
         workspaces,
-        setActiveNoteId, 
-        addNote, 
+        setActiveNoteId,
+        addNote,
         addFolder,
         addWorkspace,
-        toggleFolder, 
-        reorderNotes, 
-        reorderFolders, 
-        moveNoteToFolder, 
+        toggleFolder,
+        reorderNotes,
+        reorderFolders,
+        moveNoteToFolder,
         moveFolderToFolder,
         renameNote,
         renameFolder,
@@ -93,8 +93,8 @@ export const Sidebar = () => {
     const filteredNotes = useMemo(() => {
         if (!searchQuery.trim()) return workspaceNotes;
         const query = searchQuery.toLowerCase();
-        return workspaceNotes.filter(n => 
-            n.title.toLowerCase().includes(query) || 
+        return workspaceNotes.filter(n =>
+            n.title.toLowerCase().includes(query) ||
             n.content.toLowerCase().includes(query)
         );
     }, [workspaceNotes, searchQuery]);
@@ -104,8 +104,8 @@ export const Sidebar = () => {
         // Show folders that match OR contain matching notes
         const query = searchQuery.toLowerCase();
         const notesInFolders = new Set(filteredNotes.map(n => n.folderId).filter(Boolean));
-        return workspaceFolders.filter(f => 
-            f.name.toLowerCase().includes(query) || 
+        return workspaceFolders.filter(f =>
+            f.name.toLowerCase().includes(query) ||
             notesInFolders.has(f.id)
         );
     }, [workspaceFolders, searchQuery, filteredNotes]);
@@ -153,19 +153,19 @@ export const Sidebar = () => {
     const onDragStart = (event: DragStartEvent) => {
         const id = event.active.id as string;
         setDraggedId(id);
-        
+
         const width = event.active.rect.current.initial?.width;
         if (width) setDraggedWidth(width);
-        
+
         if (isFolder(id, folders)) toggleFolder(id, false);
     };
 
     const onDragOver = (event: DragOverEvent) => {
         const { active, over } = event;
-        if (!over) { 
+        if (!over) {
             if (expandTimerRef.current) { clearTimeout(expandTimerRef.current); expandTimerRef.current = null; }
             setDropTarget(null);
-            return; 
+            return;
         }
 
         const overId = over.id as string;
@@ -185,7 +185,7 @@ export const Sidebar = () => {
 
         if (isFolder(overId, folders)) {
             const activeCenter = activeTop + activeHeight / 2;
-            
+
             if (activeCenter < overTop + overHeight * 0.3) {
                 position = 'above';
             } else {
@@ -316,7 +316,7 @@ export const Sidebar = () => {
     const handleRenameCancel = () => {
         setEditingId(null);
     };
-    
+
     const handleExportWorkspace = async (workspaceId: string) => {
         try {
             const selected = await open({
@@ -348,7 +348,7 @@ export const Sidebar = () => {
         // Use filtered data when search is active, otherwise use full workspace data
         const effectiveFolders = searchQuery.trim() ? filteredFolders : workspaceFolders;
         const effectiveNotes = searchQuery.trim() ? filteredNotes : workspaceNotes;
-        
+
         const childFolders = effectiveFolders.filter(f => f.parentId === parentId);
         const childNotes = effectiveNotes.filter(n => n.folderId === parentId);
         // ... (rest of renderItems logic unchanged, except using workspaceFolders/workspaceNotes)
@@ -360,7 +360,7 @@ export const Sidebar = () => {
             const isEditing = editingId === folder.id;
             const isDropTargetFolder = dropTarget?.id === folder.id && dropTarget.position === 'inside';
             const folderChildren = renderItems(folder.id, depth + 1);
-            
+
             items.push(
                 <div key={folder.id} className="select-none">
                     <SortableItem id={folder.id} disableAnimation={isDropIntoFolder} disabled={isEditing}>
@@ -418,13 +418,13 @@ export const Sidebar = () => {
                 <h1 className="font-semibold text-text-primary tracking-tight truncate">Lumenote</h1>
                 <div className="relative">
                     <button onClick={() => setDropdownOpen(!dropdownOpen)} className="p-1.5 rounded-sm hover:bg-app-hover text-text-secondary transition-colors"><Plus size={18} /></button>
-                    <DropdownMenu 
-                        isOpen={dropdownOpen} 
-                        onClose={() => setDropdownOpen(false)} 
+                    <DropdownMenu
+                        isOpen={dropdownOpen}
+                        onClose={() => setDropdownOpen(false)}
                         onNewFile={() => {
                             const newId = addNote();
                             if (newId) setTimeout(() => handleRenameStart(newId, 'New Note'), 0);
-                        }} 
+                        }}
                         onNewFolder={() => {
                             const defaultName = t('new_folder', language);
                             const newId = addFolder(defaultName);
@@ -468,10 +468,10 @@ export const Sidebar = () => {
                 <div className="flex-1 overflow-y-auto px-3 py-2 space-y-2 no-scrollbar">
                     {searchResults.length > 0 ? (
                         searchResults.map(result => (
-                            <motion.div 
+                            <motion.div
                                 initial={{ opacity: 0, y: 5 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                key={result.id} 
+                                key={result.id}
                                 onClick={() => setActiveNoteId(result.id)}
                                 className={`p-2 rounded-md cursor-pointer transition-all ${activeNoteId === result.id ? 'bg-accent-soft border-accent/20' : 'hover:bg-app-hover border-transparent'} border`}
                             >
@@ -479,7 +479,7 @@ export const Sidebar = () => {
                                     <FileText size={14} className="text-accent" />
                                     <span className="text-[13px] font-medium text-text-primary truncate">{result.title}</span>
                                 </div>
-                                <div 
+                                <div
                                     className="text-[11px] text-text-secondary line-clamp-2 leading-relaxed search-snippet"
                                     dangerouslySetInnerHTML={{ __html: result.snippet }}
                                 />
@@ -507,59 +507,59 @@ export const Sidebar = () => {
                         </div>
                     </SortableContext>
 
-                <DragOverlay dropAnimation={{
-                    duration: 150,
-                    easing: 'cubic-bezier(0.25, 1, 0.5, 1)',
-                }}>
-                    {draggedId ? (
-                        (() => {
-                            const depth = getItemDepth(draggedId, workspaceFolders, workspaceNotes);
-                            const draggedNote = workspaceNotes.find(n => n.id === draggedId);
-                            const draggedFolder = workspaceFolders.find(f => f.id === draggedId);
+                    <DragOverlay dropAnimation={{
+                        duration: 150,
+                        easing: 'cubic-bezier(0.25, 1, 0.5, 1)',
+                    }}>
+                        {draggedId ? (
+                            (() => {
+                                const depth = getItemDepth(draggedId, workspaceFolders, workspaceNotes);
+                                const draggedNote = workspaceNotes.find(n => n.id === draggedId);
+                                const draggedFolder = workspaceFolders.find(f => f.id === draggedId);
 
-                            return (
-                                <div 
-                                    className="opacity-80 cursor-grabbing pointer-events-none shadow-lg ring-1 ring-black/5 rounded-sm overflow-hidden bg-app-surface scale-[1.02] transition-transform"
-                                    style={{ width: draggedWidth ? `${draggedWidth}px` : 'auto' }}
-                                >
-                                    {draggedNote ? (
-                                        <NoteItem
-                                            note={draggedNote}
-                                            isActive={activeNoteId === draggedId}
-                                            isDragging={false}
-                                            depth={depth}
-                                            onClick={() => {}}
-                                            onContextMenu={() => {}}
-                                        />
-                                    ) : draggedFolder ? (
-                                        <FolderItem
-                                            folder={draggedFolder}
-                                            isDragging={false}
-                                            isDropTarget={false}
-                                            depth={depth}
-                                            onClick={() => {}}
-                                            onContextMenu={() => {}}
-                                        />
-                                    ) : null}
-                                </div>
-                            );
-                        })()
-                    ) : null}
-                </DragOverlay>
-            </DndContext>
-        )}
+                                return (
+                                    <div
+                                        className="opacity-80 cursor-grabbing pointer-events-none shadow-lg ring-1 ring-black/5 rounded-sm overflow-hidden bg-app-surface scale-[1.02] transition-transform"
+                                        style={{ width: draggedWidth ? `${draggedWidth}px` : 'auto' }}
+                                    >
+                                        {draggedNote ? (
+                                            <NoteItem
+                                                note={draggedNote}
+                                                isActive={activeNoteId === draggedId}
+                                                isDragging={false}
+                                                depth={depth}
+                                                onClick={() => { }}
+                                                onContextMenu={() => { }}
+                                            />
+                                        ) : draggedFolder ? (
+                                            <FolderItem
+                                                folder={draggedFolder}
+                                                isDragging={false}
+                                                isDropTarget={false}
+                                                depth={depth}
+                                                onClick={() => { }}
+                                                onContextMenu={() => { }}
+                                            />
+                                        ) : null}
+                                    </div>
+                                );
+                            })()
+                        ) : null}
+                    </DragOverlay>
+                </DndContext>
+            )}
 
             {/* Footer switcher */}
             <div className="p-3 border-t border-border-muted flex flex-col gap-3 bg-app-sidebar">
-                <WorkspaceSwitcher 
-                onContextMenu={(e, wsId) => handleContextMenu(e, 'workspace', wsId)}
-                editingId={editingId}
-                editValue={editValue}
-                onEditChange={setEditValue}
-                onEditSave={handleRenameSave}
-                onEditCancel={handleRenameCancel}
-                onNewWorkspaceEdit={(id, name) => handleRenameStart(id, name)}
-            />
+                <WorkspaceSwitcher
+                    onContextMenu={(e, wsId) => handleContextMenu(e, 'workspace', wsId)}
+                    editingId={editingId}
+                    editValue={editValue}
+                    onEditChange={setEditValue}
+                    onEditSave={handleRenameSave}
+                    onEditCancel={handleRenameCancel}
+                    onNewWorkspaceEdit={(id, name) => handleRenameStart(id, name)}
+                />
                 <div className="flex justify-between items-center px-1">
                     <span className="text-[10px] text-text-muted font-medium uppercase tracking-wider">
                         {workspaces.find(w => w.id === activeWorkspaceId)?.name || t('workspace', language)}
@@ -572,11 +572,12 @@ export const Sidebar = () => {
 
             <AnimatePresence>
                 {contextMenu && (
-                    <ContextMenu 
-                        {...contextMenu} 
-                        onClose={() => setContextMenu(null)} 
+                    <ContextMenu
+                        {...contextMenu}
+                        onClose={() => setContextMenu(null)}
                         onRename={(id: string, val: string) => handleRenameStart(id, val)}
                         onExport={handleExportWorkspace}
+                        onInlineCreate={(id: string, name: string) => setTimeout(() => handleRenameStart(id, name), 0)}
                     />
                 )}
             </AnimatePresence>

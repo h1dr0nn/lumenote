@@ -91,10 +91,5 @@ pub async fn export_workspace(
 
 #[tauri::command]
 pub async fn write_text_file(path: String, content: String) -> Result<(), String> {
-    println!("Attempting to write file to: {}", path);
-    fs::write(&path, content).map_err(|e| {
-        let err = format!("Failed to write file at {}: {}", path, e);
-        println!("{}", err);
-        err
-    })
+    fs::write(&path, content).map_err(|e| format!("Failed to write file at {}: {}", path, e))
 }

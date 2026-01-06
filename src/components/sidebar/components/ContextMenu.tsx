@@ -11,12 +11,13 @@ interface ContextMenuProps extends ContextMenuType {
     onClose: () => void;
     onRename: (id: string, val: string) => void;
     onExport?: (id: string) => void;
+    onInlineCreate?: (id: string, name: string) => void;
 }
 
-export const ContextMenu = memo(({ x, y, type, itemId, onClose, onRename, onExport }: ContextMenuProps) => {
-    const { 
-        folders, notes, workspaces, deleteNote, deleteFolder, deleteWorkspace, 
-        addNote, addFolder, addWorkspace, setNoteColor, setFolderColor, setWorkspaceColor, language 
+export const ContextMenu = memo(({ x, y, type, itemId, onClose, onRename, onExport, onInlineCreate }: ContextMenuProps) => {
+    const {
+        folders, notes, workspaces, deleteNote, deleteFolder, deleteWorkspace,
+        addNote, addFolder, addWorkspace, setNoteColor, setFolderColor, setWorkspaceColor, language
     } = useStore();
     const ref = useRef<HTMLDivElement>(null);
     const [pos, setPos] = useState({ x, y });
@@ -78,12 +79,23 @@ export const ContextMenu = memo(({ x, y, type, itemId, onClose, onRename, onExpo
         { icon: <Palette size={14} />, label: t('appearance', language), action: () => setShowColorPicker(!showColorPicker) },
         { icon: <Trash2 size={14} />, label: t('delete', language), action: () => { if (itemId) deleteNote(itemId); onClose(); }, danger: true },
     ] : type === 'folder' ? [
-        { icon: <FileText size={14} />, label: t('new_note', language), action: () => { if (itemId) addNote(itemId); onClose(); } },
-        { 
-            icon: <FolderPlus size={14} />, 
-            label: t('new_folder', language), 
-            action: () => { if (itemId) addFolder(t('new_folder', language), itemId); onClose(); },
-            disabled: !(itemId && getItemDepth(itemId, folders, notes) < 2) 
+        {
+            icon: <FileText size={14} />, label: t('new_note', language), action: () => {
+                const newId = itemId ? addNote(itemId) : addNote();
+                if (newId) onInlineCreate?.(newId, 'New Note');
+                onClose();
+            }
+        },
+        {
+            icon: <FolderPlus size={14} />,
+            label: t('new_folder', language),
+            action: () => {
+                const defaultName = t('new_folder', language);
+                const newId = itemId ? addFolder(defaultName, itemId) : addFolder(defaultName);
+                if (newId) onInlineCreate?.(newId, defaultName);
+                onClose();
+            },
+            disabled: !(itemId && getItemDepth(itemId, folders, notes) < 2)
         },
         { icon: <Palette size={14} />, label: t('appearance', language), action: () => setShowColorPicker(!showColorPicker) },
         { icon: <Edit3 size={14} />, label: t('rename', language), action: handleRename },
@@ -94,43 +106,56 @@ export const ContextMenu = memo(({ x, y, type, itemId, onClose, onRename, onExpo
         { icon: <FileText size={14} />, label: t('export_markdown', language), action: () => { if (itemId) onExport?.(itemId); onClose(); } },
         { icon: <Trash2 size={14} />, label: t('delete', language), action: () => { if (itemId) deleteWorkspace(itemId); onClose(); }, danger: true },
     ] : [
-        { icon: <FileText size={14} />, label: t('new_note', language), action: () => { addNote(); onClose(); } },
-        { icon: <FolderPlus size={14} />, label: t('new_folder', language), action: () => { addFolder(t('new_folder', language)); onClose(); } },
+        {
+            icon: <FileText size={14} />, label: t('new_note', language), action: () => {
+                const newId = addNote();
+                if (newId) onInlineCreate?.(newId, 'New Note');
+                onClose();
+            }
+        },
+        {
+            icon: <FolderPlus size={14} />, label: t('new_folder', language), action: () => {
+                const defaultName = t('new_folder', language);
+                const newId = addFolder(defaultName);
+                if (newId) onInlineCreate?.(newId, defaultName);
+                onClose();
+            }
+        },
         { type: 'separator' },
         { icon: <LayoutGrid size={14} />, label: t('new_workspace', language), action: () => { addWorkspace(t('new_workspace', language)); onClose(); } },
     ];
 
     const currentColor = itemId ? (
-        type === 'note' ? notes.find(n => n.id === itemId)?.color : 
-        type === 'folder' ? folders.find(f => f.id === itemId)?.color :
-        type === 'workspace' ? workspaces.find(w => w.id === itemId)?.color : null
+        type === 'note' ? notes.find(n => n.id === itemId)?.color :
+            type === 'folder' ? folders.find(f => f.id === itemId)?.color :
+                type === 'workspace' ? workspaces.find(w => w.id === itemId)?.color : null
     ) : null;
 
     return (
-        <motion.div ref={ref} 
+        <motion.div ref={ref}
             layout
-            initial={{ opacity: 0, scale: 0.95 }} 
-            animate={{ opacity: 1, scale: 1 }} 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            transition={{ 
+            transition={{
                 layout: { duration: 0.2, ease: "easeOut" },
                 opacity: { duration: 0.15 },
                 scale: { duration: 0.15 }
             }}
-            style={{ left: pos.x, top: pos.y }} 
+            style={{ left: pos.x, top: pos.y }}
             className="fixed bg-app-surface border border-border-subtle rounded-md shadow-md z-100 min-w-[220px] py-1 overflow-hidden"
         >
             {items.map((item: any, i) => item.type === 'separator' ? (
                 <div key={i} className="h-px bg-border-subtle my-1" />
             ) : (
-                <button 
-                    key={i} 
-                    onClick={(e) => { e.stopPropagation(); if (!item.disabled) item.action(); }} 
+                <button
+                    key={i}
+                    onClick={(e) => { e.stopPropagation(); if (!item.disabled) item.action(); }}
                     disabled={item.disabled}
                     className={`w-full flex items-center justify-between px-3 py-1.5 text-sm transition-colors
-                        ${item.danger ? 'text-red-500 hover:bg-red-50/10' : 
-                          item.disabled ? 'text-text-muted cursor-not-allowed opacity-50' : 
-                          'text-text-primary hover:bg-app-hover'}`}
+                        ${item.danger ? 'text-red-500 hover:bg-red-50/10' :
+                            item.disabled ? 'text-text-muted cursor-not-allowed opacity-50' :
+                                'text-text-primary hover:bg-app-hover'}`}
                 >
                     <span className="flex items-center gap-2">{item.icon} {item.label}</span>
                     {item.label === t('appearance', language) && <div className="w-3.5 h-3.5 rounded-full border border-black/5 shadow-inner" style={{ backgroundColor: currentColor || 'transparent' }} />}
@@ -139,9 +164,9 @@ export const ContextMenu = memo(({ x, y, type, itemId, onClose, onRename, onExpo
 
             <AnimatePresence>
                 {showColorPicker && (
-                    <motion.div 
-                        initial={{ height: 0, opacity: 0 }} 
-                        animate={{ height: 'auto', opacity: 1 }} 
+                    <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
                         exit={{ height: 0, opacity: 0 }}
                         transition={{ duration: 0.2, ease: "easeOut" }}
                         className="border-t border-border-subtle bg-app-surface overflow-hidden"
@@ -168,13 +193,13 @@ export const ContextMenu = memo(({ x, y, type, itemId, onClose, onRename, onExpo
                             </div>
                             <div className="custom-picker">
                                 <p className="text-[10px] text-text-muted uppercase font-bold tracking-wider mb-2">{t('custom_color', language)}</p>
-                                <HexColorPicker 
-                                    color={currentColor || '#4F7DF3'} 
+                                <HexColorPicker
+                                    color={currentColor || '#4F7DF3'}
                                     onChange={(color) => {
                                         if (!itemId) return;
                                         if (type === 'note') setNoteColor(itemId, color);
                                         else setFolderColor(itemId, color);
-                                    }} 
+                                    }}
                                 />
                             </div>
                         </div>
