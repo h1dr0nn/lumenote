@@ -15,7 +15,7 @@
   --color-text-secondary: #6b7280;
   --color-text-muted: #9ca3af;
   --color-text-accent: #2563eb;
-  
+
   /* Lumenote Editorial Palette - Light */
   --syntax-h1-h6: #111827;
   --syntax-keyword: #7c3aed;
@@ -63,7 +63,7 @@
   --color-text-secondary: #9ca3af;
   --color-text-muted: #6b7280;
   --color-text-accent: #93c5fd;
-  
+
   /* Lumenote Editorial Palette - Dark */
   --syntax-h1-h6: #ffffff;
   --syntax-keyword: #a78bfa;
@@ -77,7 +77,7 @@
 
   --color-border-subtle: rgba(255, 255, 255, 0.06);
   --color-border-muted: rgba(255, 255, 255, 0.04);
-  
+
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
   --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.4);
 }
@@ -89,7 +89,25 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-*, ::before, ::after {
+/* Disable text selection globally for native app feel */
+body {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Allow text selection in editable areas */
+input,
+textarea,
+[contenteditable="true"],
+.cm-content,
+.prose {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+*,
+::before,
+::after {
   transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
 }
 

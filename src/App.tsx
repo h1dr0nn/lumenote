@@ -13,12 +13,12 @@ import { t } from "./utils/i18n";
 import { useEffect } from "react";
 
 function App() {
-  const { 
-    activeNoteId, 
-    notes, 
-    viewMode, 
-    updateNoteContent, 
-    activePopup, 
+  const {
+    activeNoteId,
+    notes,
+    viewMode,
+    updateNoteContent,
+    activePopup,
     setActivePopup,
     theme,
     fontPreset,
@@ -32,7 +32,7 @@ function App() {
   // Handle Theme and Typography
   useEffect(() => {
     const root = window.document.documentElement;
-    
+
     // Theme application
     const applyTheme = (t: 'light' | 'dark') => {
       root.classList.remove('light', 'dark');
@@ -66,21 +66,30 @@ function App() {
     };
 
     const currentSet = fontSets[fontPreset as keyof typeof fontSets] || fontSets.sans;
-    
+
     // Propagate to CSS variables
     root.style.setProperty('--font-ui', currentSet.ui);
     root.style.setProperty('--font-serif', currentSet.serif);
     root.style.setProperty('--font-mono', currentSet.mono);
-    
+
     // Legacy support for Editor/Preview specific vars
     root.style.setProperty('--font-editor', currentSet.mono);
     root.style.setProperty('--font-preview', currentSet.ui);
-    
+
     root.style.setProperty('--text-md', `${fontSize}px`);
-    
+
     // Explicitly reset weight for editor to avoid bolding issue
     root.style.setProperty('--cm-font-weight', '400');
   }, [theme, fontPreset, fontSize]);
+
+  // Block browser's native context menu for native app feel
+  useEffect(() => {
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+    };
+    document.addEventListener('contextmenu', handleContextMenu);
+    return () => document.removeEventListener('contextmenu', handleContextMenu);
+  }, []);
 
   return (
     <div className="flex h-screen w-full bg-app-bg text-text-primary font-ui overflow-hidden">
@@ -103,50 +112,44 @@ function App() {
             </div>
 
             {/* Smart Pill Sync Button */}
-            <button 
+            <button
               onClick={() => setActivePopup('sync')}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all group ${
-                activePopup === 'sync' 
-                  ? 'bg-accent/10 border-accent' 
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all group ${activePopup === 'sync'
+                  ? 'bg-accent/10 border-accent'
                   : 'bg-app-hover/50 border-border-muted hover:border-accent/30'
-              }`}
+                }`}
             >
-              <div className={`w-2 h-2 rounded-full transition-colors ${
-                isSyncing 
-                  ? 'bg-accent animate-pulse' 
+              <div className={`w-2 h-2 rounded-full transition-colors ${isSyncing
+                  ? 'bg-accent animate-pulse'
                   : (lastSyncedAt ? 'bg-emerald-500' : 'bg-text-muted')
-              }`} />
-              <span className={`text-[11px] font-bold uppercase tracking-wider transition-colors ${
-                activePopup === 'sync' ? 'text-accent' : 'text-text-secondary group-hover:text-text-primary'
-              }`}>
+                }`} />
+              <span className={`text-[11px] font-bold uppercase tracking-wider transition-colors ${activePopup === 'sync' ? 'text-accent' : 'text-text-secondary group-hover:text-text-primary'
+                }`}>
                 {isSyncing ? t('syncing', language) : (lastSyncedAt ? t('sync_ready', language) : t('sync', language))}
               </span>
               {isSyncing ? (
                 <RefreshCw size={14} className="animate-spin text-accent" />
               ) : (
-                <Cloud size={14} className={`transition-colors ${
-                  activePopup === 'sync' ? 'text-accent' : 'text-text-muted group-hover:text-text-secondary'
-                }`} />
+                <Cloud size={14} className={`transition-colors ${activePopup === 'sync' ? 'text-accent' : 'text-text-muted group-hover:text-text-secondary'
+                  }`} />
               )}
             </button>
 
             {/* Share Button */}
-            <button 
+            <button
               onClick={() => setActivePopup('share')}
-              className={`p-2 transition-colors rounded-lg ${
-                activePopup === 'share' ? 'text-accent bg-accent/5' : 'text-text-muted hover:text-text-secondary hover:bg-app-hover'
-              }`}
+              className={`p-2 transition-colors rounded-lg ${activePopup === 'share' ? 'text-accent bg-accent/5' : 'text-text-muted hover:text-text-secondary hover:bg-app-hover'
+                }`}
               title={t('share', language)}
             >
               <Share2 size={18} />
             </button>
 
             {/* Settings Button */}
-            <button 
+            <button
               onClick={() => setActivePopup('settings')}
-              className={`p-2 transition-colors rounded-lg ${
-                activePopup === 'settings' ? 'text-accent bg-accent/5' : 'text-text-muted hover:text-text-secondary hover:bg-app-hover'
-              }`}
+              className={`p-2 transition-colors rounded-lg ${activePopup === 'settings' ? 'text-accent bg-accent/5' : 'text-text-muted hover:text-text-secondary hover:bg-app-hover'
+                }`}
               title={t('settings', language)}
             >
               <SettingsIcon size={18} />
@@ -194,7 +197,7 @@ function App() {
                   )}
                 </motion.div>
               ) : (
-                <motion.div 
+                <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   className="flex flex-col items-center justify-center h-full text-text-muted space-y-4"
