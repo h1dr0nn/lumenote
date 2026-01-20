@@ -1,23 +1,23 @@
 {
-  "version": "1.0.1",
+  "version": "1.0.2",
   "notes": "Initial release",
-  "pub_date": "2026-01-06T04:13:19.000Z",
+  "pub_date": "2026-01-20T05:46:21.372Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRUkNXajAwQ1ZOT2pzMXpEVkJ0QjNDU2RCaUxYVUp2MVR6Rm5Kb29GUVJheWcvRVh2YW5Vekk5ZTRsa0tCdVg1Y2NZL1BCVlFEQmk5bkM2bHhzZ0hwNFlJalZhbWVQd1EwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzY3NjcyNDcxCWZpbGU6THVtZW5vdGUuYXBwLnRhci5negpUV0Y5ajlEa3loUCt3TEU0V0ROTzN2VFJTRGZzZEZvcElXQlo5TUlqNHBua0ZSVy9IdUYzSkVaZ3F2T0dFSVBodEpOYmFlLzk2ejBtbXVqQmhOdGdCQT09Cg==",
-      "url": "https://github.com/h1dr0nn/lumenote/releases/download/release-v1.0.1/lumenote-1.0.1-macos-arm64-updater.app.tar.gz"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRUkNXajAwQ1ZOT3NLUzU3M3VHeVhXUlM0d1IyWWVVNjJFTzNHWDJobnU1b2NOaEF6VG5xbjY4c1hWY2RZUmVtVjQ2ckdDQnF5NWd1cTh5WFBUTEtBa2s3VGpKT2YzT0FjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzY4ODg3NDc0CWZpbGU6THVtZW5vdGUuYXBwLnRhci5negpCNDRVZWttVEJrR256aGRrZHJqR2I1clNMQzZSMHZ5WlFncTFmM2pmNll3dUxXS081QVkwQ1NZWFovQk96bEUxOWJrU2laOUJkc3U0S20xSHdNd1RCUT09Cg==",
+      "url": "https://github.com/h1dr0nn/lumenote/releases/download/release-v1.0.2/lumenote-1.0.2-macos-arm64-updater.app.tar.gz"
     },
     "darwin-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRUkNXajAwQ1ZOT2s1NnNoSEpTRlhha0gxTlJ4L1NSTXc2dGl2K05kcjU4Y2ZtSnVJN3dEOGFpOVdMNlhsMUlIcTBaQ1dFU045RU1tWlZsTVJlNDJTWnBia2ZYdkFpMHdvPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzY3NjcyNzgxCWZpbGU6THVtZW5vdGUuYXBwLnRhci5negphU1VFMUFMbXJxek45QUNCaG95TDBvN3ZjM3hma0hjeWwxdUF2TnJ5TzR1aVFiaTVTU21GVGJkWHFwVmwxNmNhclNJUHRqdmN2c216Q0QrQ0ZURXNCdz09Cg==",
-      "url": "https://github.com/h1dr0nn/lumenote/releases/download/release-v1.0.1/lumenote-1.0.1-macos-x64-updater.app.tar.gz"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRUkNXajAwQ1ZOT3NrQkdhSjNBM1kzNU0zMzdQN0JLd215bU1seTB4TytWTzNyOFd4MDV2cTk0aGZnTGwzVVVISVJKVnVUQ0hDUzR4U1V2L0pPYnVkN0M4N0dHdFpqeXdnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzY4ODg3OTYzCWZpbGU6THVtZW5vdGUuYXBwLnRhci5negpVY0NocitqVVZXTjJzTG1xNlJFdVJVWDFTOEUxcXBEb3JLaWM4dndLK284WDV0emo5bkJPV3dMRTJOZ3AvMmFXaHZNUWZQRHJTUCtFS3NQZEloVXFEdz09Cg==",
+      "url": "https://github.com/h1dr0nn/lumenote/releases/download/release-v1.0.2/lumenote-1.0.2-macos-x64-updater.app.tar.gz"
     },
     "linux-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRUkNXajAwQ1ZOT25XYVdwaHFiNG1aNDNrV0ZSU0JpNmFIenROSXRnajZpa21DZGgraHpPUlhVRlgrK1EzaGxBbXA3QURLb3NETXh3UmVVY0o1dGxOZWlRWmVXQjBIVWc0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzY3NjcyNjA0CWZpbGU6THVtZW5vdGVfMS4wLjFfYW1kNjQuQXBwSW1hZ2UKcVhEbk03VDlaQThBU0VvTnAzVlBqa0RWeFZlSVdwRzRuQ2VSaGdBWmthelNJd2hCVlIvRzZMRGZOamRMajRyZXlnbGJUZ0tJbTFjeGJQT25FWDk0Q0E9PQo=",
-      "url": "https://github.com/h1dr0nn/lumenote/releases/download/release-v1.0.1/lumenote-1.0.1-linux-x64-updater.AppImage.tar.gz"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRUkNXajAwQ1ZOT3NseGRaTFdyc0NhemlCNjNPK2RBUUJPcjJkd0xna3E4RUw5WG93TzlVRVgvVTNEZThYZER5aXlpUUhiNzNpd2tPV2E1V3RWUUszMzdwcHJnWXF0d0FJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzY4ODg3NjU0CWZpbGU6THVtZW5vdGVfMS4wLjJfYW1kNjQuQXBwSW1hZ2UKUjNPcEViM2tjVzNYOWoxczVUK2J3a2QyKzhjRzR5bUR4clY4MDU2dlN6OHd3ZTMyOG40eklmWGcxZFFuMG5LTXkzLzg2UGlOOHRuVHpaODN6aWpIQlE9PQo=",
+      "url": "https://github.com/h1dr0nn/lumenote/releases/download/release-v1.0.2/lumenote-1.0.2-linux-x64-updater.AppImage.tar.gz"
     },
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRUkNXajAwQ1ZOT2xsemZEbUJXbWE2OTg1cy9XcGRQRkxIcjkyNFNtNEdrazdWQ3BlNTZnR001L0lpN0FDMDl2anRleHR6aHNPTm1wVDlyZW9WWDcxN3ZQbUFSWXFTUHdNPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzY3NjcyNjk3CWZpbGU6THVtZW5vdGVfMS4wLjFfeDY0X2VuLVVTLm1zaQoyY3dqNzFrL2tCS2lWV1g0N1k3YnNrd2hxWHhPdjBhTVUwcU9aRWZHSjE0dEVIbEZhOGFCdlRydVJ6Ly9NNE13dVdIRDNObklMVmFvcUhxOUlYUkJEQT09Cg==",
-      "url": "https://github.com/h1dr0nn/lumenote/releases/download/release-v1.0.1/lumenote-1.0.1-windows-x64-updater.msi.zip"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRUkNXajAwQ1ZOT2gvTm1yY0EvYmlGYUxPWUszOXQ1YktlanVodDlLQTFYMzZiSDVKZWN2Yi9jQi9WaEpyUTM5dDlyeHEvaW56bGI5d01MdTFxdHE0ZkN4ZTFTdVM2TFFRPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzY4ODg3NzQ2CWZpbGU6THVtZW5vdGVfMS4wLjJfeDY0X2VuLVVTLm1zaQpJa3V1MGg4L25KeU1nWFQveWk4QVFPKy9rRmU3d09jeER0QUxYWjRKRjFEUGNoS0hEeUFvMFJPdUVrUWs2djVDSTVKdmp5OXIxUkJnalQvU2NLNHZDZz09Cg==",
+      "url": "https://github.com/h1dr0nn/lumenote/releases/download/release-v1.0.2/lumenote-1.0.2-windows-x64-updater.msi.zip"
     }
   }
 }
