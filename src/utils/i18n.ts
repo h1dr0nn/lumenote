@@ -184,7 +184,6 @@ export const translations = {
     import_success: "Import workspace successful!",
     import_failed: "Import workspace failed",
     workspace_name_prompt: "Enter workspace name (optional):",
-    export_success: "Export successful!",
     sync: "Sync",
     sync_desc: "Synchronization",
     server_url: "Server URL",
