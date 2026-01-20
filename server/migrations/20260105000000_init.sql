@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS notes (
     content TEXT NOT NULL,
     folder_id TEXT,
     workspace_id TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
     is_deleted BOOLEAN NOT NULL DEFAULT 0
 );
@@ -15,6 +16,7 @@ CREATE TABLE IF NOT EXISTS folders (
     name TEXT NOT NULL,
     parent_id TEXT,
     workspace_id TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
     is_deleted BOOLEAN NOT NULL DEFAULT 0
 );

@@ -1,11 +1,15 @@
 use crate::db::{Db, FolderRecord, NoteRecord};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::fs::File;
+use std::io::Write;
+use std::path::PathBuf;
+use zip::write::{FileOptions, ZipWriter};
+use zip::CompressionMethod;
 
 pub async fn export_workspace_logic(
     db: &Db,
     workspace_id: String,
-    base_path: PathBuf,
+    zip_path: PathBuf,
 ) -> Result<(), String> {
     let notes = db.get_notes().await?;
     let folders = db.get_folders().await?;
@@ -19,8 +23,19 @@ pub async fn export_workspace_logic(
         .filter(|f| f.workspace_id == workspace_id)
         .collect();
 
-    // Export logic
-    export_folder_recursive(None, &ws_notes, &ws_folders, &base_path)?;
+    // Create zip file
+    let file = File::create(&zip_path)
+        .map_err(|e| format!("Failed to create zip file {:?}: {}", zip_path, e))?;
+    let mut zip = ZipWriter::new(file);
+    let options = FileOptions::default()
+        .compression_method(CompressionMethod::Deflated)
+        .unix_permissions(0o755);
+
+    // Export logic - add files to zip
+    export_folder_recursive(None, &ws_notes, &ws_folders, &mut zip, &options, "")?;
+
+    zip.finish()
+        .map_err(|e| format!("Failed to finalize zip file: {}", e))?;
 
     Ok(())
 }
@@ -29,37 +44,54 @@ fn export_folder_recursive(
     parent_id: Option<String>,
     notes: &[NoteRecord],
     folders: &[FolderRecord],
-    current_path: &Path,
+    zip: &mut ZipWriter<File>,
+    options: &FileOptions,
+    current_path: &str,
 ) -> Result<(), String> {
-    if !current_path.exists() {
-        fs::create_dir_all(current_path)
-            .map_err(|e| format!("Failed to create directory {:?}: {}", current_path, e))?;
-    }
-
     // Export notes in this folder
     for note in notes.iter().filter(|n| n.folder_id == parent_id) {
         let safe_title = sanitize_filename(&note.title);
-        let mut filename = if safe_title.is_empty() {
-            "Untitled".to_string()
+        let filename = if safe_title.is_empty() {
+            "Untitled.md".to_string()
         } else {
-            safe_title
+            format!("{}.md", safe_title)
         };
-        filename.push_str(".md");
 
-        let file_path = current_path.join(filename);
-        fs::write(&file_path, &note.content)
-            .map_err(|e| format!("Failed to write file {:?}: {}", file_path, e))?;
+        let zip_path = if current_path.is_empty() {
+            filename.clone()
+        } else {
+            format!("{}/{}", current_path, filename)
+        };
+
+        zip.start_file(&zip_path, *options)
+            .map_err(|e| format!("Failed to add file to zip: {}", e))?;
+        zip.write_all(note.content.as_bytes())
+            .map_err(|e| format!("Failed to write content to zip: {}", e))?;
     }
 
     // Recurse into subfolders
     for folder in folders.iter().filter(|f| f.parent_id == parent_id) {
         let subfolder_name = sanitize_filename(&folder.name);
-        let subfolder_path = current_path.join(if subfolder_name.is_empty() {
-            "Untitled Folder".to_string()
+        let folder_name = if subfolder_name.is_empty() {
+            "Untitled Folder"
         } else {
-            subfolder_name
-        });
-        export_folder_recursive(Some(folder.id.clone()), notes, folders, &subfolder_path)?;
+            &subfolder_name
+        };
+
+        let subfolder_path = if current_path.is_empty() {
+            folder_name.to_string()
+        } else {
+            format!("{}/{}", current_path, folder_name)
+        };
+
+        export_folder_recursive(
+            Some(folder.id.clone()),
+            notes,
+            folders,
+            zip,
+            options,
+            &subfolder_path,
+        )?;
     }
 
     Ok(())

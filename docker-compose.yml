@@ -11,5 +11,7 @@ services:
       - ./data:/app/data
     environment:
       - DATABASE_URL=sqlite:/app/data/sync.db?mode=rwc
-      - RUST_LOG=server=debug,tower_http=debug
+      - RUST_LOG=server=info,tower_http=debug
+      # Optional: Set custom sync key (default: ln_opt_password)
+      # - DEFAULT_SYNC_KEY=ln_opt_your_custom_key_here
     restart: unless-stopped

@@ -26,6 +26,7 @@ function App() {
     language,
     isSyncing,
     lastSyncedAt,
+    hasUnsyncedChanges,
   } = useStore();
   const activeNote = notes.find(n => n.id === activeNoteId);
 
@@ -121,7 +122,7 @@ function App() {
             >
               <div className={`w-2 h-2 rounded-full transition-colors ${isSyncing
                   ? 'bg-accent animate-pulse'
-                  : (lastSyncedAt ? 'bg-emerald-500' : 'bg-text-muted')
+                  : (hasUnsyncedChanges ? 'bg-amber-500 animate-pulse' : (lastSyncedAt ? 'bg-emerald-500' : 'bg-text-muted'))
                 }`} />
               <span className={`text-[11px] font-bold uppercase tracking-wider transition-colors ${activePopup === 'sync' ? 'text-accent' : 'text-text-secondary group-hover:text-text-primary'
                 }`}>

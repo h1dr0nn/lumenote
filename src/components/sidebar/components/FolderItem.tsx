@@ -50,7 +50,9 @@ export const FolderItem = memo(({
                 <ChevronRight size={14} style={{ color: folder.color }} className={!folder.color ? (isDropTarget ? 'text-accent' : 'text-text-muted') : ''} />
             </motion.div>
         </div>
-        <FolderIcon size={14} style={{ color: folder.color }} className={!folder.color ? (isDropTarget ? 'text-accent' : 'text-text-muted') : ''} />
+        <div className="w-[14px] h-[14px] flex items-center justify-center shrink-0">
+            <FolderIcon size={14} style={{ color: folder.color }} className={!folder.color ? (isDropTarget ? 'text-accent' : 'text-text-muted') : ''} />
+        </div>
         {isEditing ? (
             <input
                 autoFocus

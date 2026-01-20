@@ -1,20 +1,26 @@
 import { Modal } from '../ui/Modal';
 import { useStore } from '../../store/useStore';
-import { Cloud, Globe, Key, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Cloud, Globe, Key, RefreshCw, CheckCircle2, AlertCircle, Clock } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { t } from '../../utils/i18n';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 export const SyncPopup = () => {
     const { 
         activePopup, setActivePopup,
         syncUrl, syncKey, setSyncConfig,
         isSyncing, performSync,
-        lastSyncedAt, language
+        lastSyncedAt, hasUnsyncedChanges, language
     } = useStore();
 
     const [url, setUrl] = useState(syncUrl);
     const [key, setKey] = useState(syncKey);
+
+    // Update local state when store values change (e.g., after loading from localStorage)
+    useEffect(() => {
+        setUrl(syncUrl);
+        setKey(syncKey);
+    }, [syncUrl, syncKey]);
 
     const handleSave = () => {
         setSyncConfig(url, key);
@@ -98,9 +104,18 @@ export const SyncPopup = () => {
                                     {language === 'vi' ? 'Đang đồng bộ...' : 'Syncing...'}
                                 </span>
                             ) : lastSyncedAt ? (
-                                <span className="text-emerald-500 flex items-center gap-1">
-                                    <CheckCircle2 size={12} />
-                                    {t('sync_success', language)}
+                                <span className={`flex items-center gap-1 ${hasUnsyncedChanges ? 'text-amber-500' : 'text-emerald-500'}`}>
+                                    {hasUnsyncedChanges ? (
+                                        <>
+                                            <Clock size={12} />
+                                            {language === 'vi' ? 'Có thay đổi chưa sync' : 'Unsynced changes'}
+                                        </>
+                                    ) : (
+                                        <>
+                                            <CheckCircle2 size={12} />
+                                            {t('sync_success', language)}
+                                        </>
+                                    )}
                                 </span>
                             ) : (
                                 <span className="text-text-muted flex items-center gap-1">
@@ -116,6 +131,12 @@ export const SyncPopup = () => {
                             {lastSyncedAt ? new Date(lastSyncedAt).toLocaleString() : t('never', language)}
                         </span>
                     </div>
+                    {hasUnsyncedChanges && lastSyncedAt && (
+                        <div className="flex items-center gap-1.5 text-[11px] text-amber-500 bg-amber-500/10 px-2 py-1.5 rounded-lg">
+                            <Clock size={12} />
+                            <span>{language === 'vi' ? 'Có thay đổi chưa được đồng bộ' : 'You have unsynced changes'}</span>
+                        </div>
+                    )}
                 </div>
 
                 {/* Action Section */}

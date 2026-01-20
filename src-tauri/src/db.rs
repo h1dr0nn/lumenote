@@ -27,6 +27,17 @@ pub struct FolderRecord {
     pub is_deleted: bool,
 }
 
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, Clone)]
+pub struct WorkspaceRecord {
+    pub id: String,
+    pub name: String,
+    pub color: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub version: i32,
+    pub is_deleted: bool,
+}
+
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct SearchResult {
     pub id: String,
@@ -262,10 +273,99 @@ impl Db {
             .map_err(|e| e.to_string())
     }
 
+    pub async fn get_workspaces(&self) -> Result<Vec<WorkspaceRecord>, String> {
+        sqlx::query_as::<_, WorkspaceRecord>("SELECT * FROM workspaces WHERE is_deleted = 0 ORDER BY created_at ASC")
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    pub async fn upsert_workspace(&self, workspace: WorkspaceRecord) -> Result<(), String> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|e| e.to_string())?
+            .as_millis() as i64;
+
+        // Get old created_at and version if exists
+        let old_workspace: Option<(i64, i32)> =
+            sqlx::query_as("SELECT created_at, version FROM workspaces WHERE id = ?1")
+                .bind(&workspace.id)
+                .fetch_optional(&self.pool)
+                .await
+                .unwrap_or(None);
+
+        let (created_at, new_version) = match old_workspace {
+            Some((ca, v)) => (ca, v + 1),
+            None => (now, 1),
+        };
+
+        sqlx::query(
+            "INSERT INTO workspaces (id, name, color, created_at, updated_at, version, is_deleted)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+             ON CONFLICT(id) DO UPDATE SET
+                name = excluded.name,
+                color = excluded.color,
+                updated_at = excluded.updated_at,
+                version = excluded.version,
+                is_deleted = excluded.is_deleted",
+        )
+        .bind(&workspace.id)
+        .bind(&workspace.name)
+        .bind(&workspace.color)
+        .bind(created_at)
+        .bind(now)
+        .bind(new_version)
+        .bind(workspace.is_deleted)
+        .execute(&self.pool)
+        .await
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+    }
+
+    pub async fn apply_remote_update_workspace(&self, workspace: WorkspaceRecord) -> Result<(), String> {
+        sqlx::query(
+            "INSERT INTO workspaces (id, name, color, created_at, updated_at, version, is_deleted)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+             ON CONFLICT(id) DO UPDATE SET
+                name = excluded.name,
+                color = excluded.color,
+                updated_at = excluded.updated_at,
+                version = excluded.version,
+                is_deleted = excluded.is_deleted
+             WHERE excluded.updated_at > workspaces.updated_at",
+        )
+        .bind(&workspace.id)
+        .bind(&workspace.name)
+        .bind(&workspace.color)
+        .bind(workspace.created_at)
+        .bind(workspace.updated_at)
+        .bind(workspace.version)
+        .bind(workspace.is_deleted)
+        .execute(&self.pool)
+        .await
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+    }
+
+    pub async fn delete_workspace(&self, id: String) -> Result<(), String> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as i64;
+
+        sqlx::query("UPDATE workspaces SET is_deleted = 1, updated_at = ?1 WHERE id = ?2")
+            .bind(now)
+            .bind(id)
+            .execute(&self.pool)
+            .await
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
+
     pub async fn get_sync_data(
         &self,
         since: i64,
-    ) -> Result<(Vec<NoteRecord>, Vec<FolderRecord>), String> {
+    ) -> Result<(Vec<NoteRecord>, Vec<FolderRecord>, Vec<WorkspaceRecord>), String> {
         let notes = sqlx::query_as::<_, NoteRecord>("SELECT * FROM notes WHERE updated_at > ?1")
             .bind(since)
             .fetch_all(&self.pool)
@@ -279,7 +379,14 @@ impl Db {
                 .await
                 .map_err(|e| e.to_string())?;
 
-        Ok((notes, folders))
+        let workspaces =
+            sqlx::query_as::<_, WorkspaceRecord>("SELECT * FROM workspaces WHERE updated_at > ?1")
+                .bind(since)
+                .fetch_all(&self.pool)
+                .await
+                .map_err(|e| e.to_string())?;
+
+        Ok((notes, folders, workspaces))
     }
 
     pub async fn search_notes(&self, query: String) -> Result<Vec<SearchResult>, String> {
@@ -351,6 +458,20 @@ pub async fn init_db(app_dir: std::path::PathBuf) -> Result<Pool<Sqlite>, sqlx::
     .execute(&pool)
     .await?;
 
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS workspaces (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            color TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL DEFAULT 0,
+            version INTEGER NOT NULL DEFAULT 1,
+            is_deleted BOOLEAN NOT NULL DEFAULT 0
+        )",
+    )
+    .execute(&pool)
+    .await?;
+
     // Migration: Add columns to notes if they don't exist
     let note_info: Vec<(i64, String, String, i64, Option<String>, i64)> =
         sqlx::query_as("PRAGMA table_info(notes)")
@@ -392,6 +513,37 @@ pub async fn init_db(app_dir: std::path::PathBuf) -> Result<Pool<Sqlite>, sqlx::
         sqlx::query("ALTER TABLE folders ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
             .execute(&pool)
             .await?;
+    }
+
+    // Migration: Check if workspaces table exists and add default workspace if empty
+    let workspace_count: (i64,) = sqlx::query_as("SELECT count(*) FROM workspaces WHERE is_deleted = 0")
+        .fetch_one(&pool)
+        .await
+        .unwrap_or((0,));
+    
+    if workspace_count.0 == 0 {
+        // Insert default workspace if no workspaces exist
+        let default_id = "default".to_string();
+        let default_name = "Lumenote".to_string();
+        let default_color = "#4F7DF3".to_string();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as i64;
+        
+        sqlx::query(
+            "INSERT OR IGNORE INTO workspaces (id, name, color, created_at, updated_at, version, is_deleted)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)"
+        )
+        .bind(&default_id)
+        .bind(&default_name)
+        .bind(&default_color)
+        .bind(now)
+        .bind(now)
+        .bind(1)
+        .bind(false)
+        .execute(&pool)
+        .await?;
     }
 
     sqlx::query(
@@ -523,6 +675,25 @@ pub async fn apply_remote_update_folder(
 pub struct SyncDataResponse {
     pub notes: Vec<NoteRecord>,
     pub folders: Vec<FolderRecord>,
+    pub workspaces: Vec<WorkspaceRecord>,
+}
+
+#[tauri::command]
+pub async fn get_workspaces(state: tauri::State<'_, DbState>) -> Result<Vec<WorkspaceRecord>, String> {
+    state.db.get_workspaces().await
+}
+
+#[tauri::command]
+pub async fn upsert_workspace(
+    state: tauri::State<'_, DbState>,
+    workspace: WorkspaceRecord,
+) -> Result<(), String> {
+    state.db.upsert_workspace(workspace).await
+}
+
+#[tauri::command]
+pub async fn delete_workspace(state: tauri::State<'_, DbState>, id: String) -> Result<(), String> {
+    state.db.delete_workspace(id).await
 }
 
 #[tauri::command]
@@ -530,8 +701,16 @@ pub async fn get_sync_data(
     state: tauri::State<'_, DbState>,
     since: i64,
 ) -> Result<SyncDataResponse, String> {
-    let (notes, folders) = state.db.get_sync_data(since).await?;
-    Ok(SyncDataResponse { notes, folders })
+    let (notes, folders, workspaces) = state.db.get_sync_data(since).await?;
+    Ok(SyncDataResponse { notes, folders, workspaces })
+}
+
+#[tauri::command]
+pub async fn apply_remote_update_workspace(
+    state: tauri::State<'_, DbState>,
+    workspace: WorkspaceRecord,
+) -> Result<(), String> {
+    state.db.apply_remote_update_workspace(workspace).await
 }
 
 #[cfg(test)]

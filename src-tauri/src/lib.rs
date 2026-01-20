@@ -1,11 +1,15 @@
 mod db;
 mod exporter;
+mod importer;
 
 use db::{
-    apply_remote_update_folder, apply_remote_update_note, delete_folder, delete_note, get_folders,
-    get_notes, get_sync_data, init_db, search_notes, upsert_folder, upsert_note, DbState,
+    apply_remote_update_folder, apply_remote_update_note, apply_remote_update_workspace,
+    delete_folder, delete_note, delete_workspace, get_folders,
+    get_notes, get_sync_data, get_workspaces, init_db, search_notes, upsert_folder, upsert_note,
+    upsert_workspace, DbState,
 };
 use exporter::{export_workspace, write_text_file};
+use importer::import_workspace;
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -42,12 +46,17 @@ pub fn run() {
             get_folders,
             upsert_folder,
             delete_folder,
+            get_workspaces,
+            upsert_workspace,
+            delete_workspace,
             search_notes,
             export_workspace,
+            import_workspace,
             write_text_file,
             get_sync_data,
             apply_remote_update_note,
-            apply_remote_update_folder
+            apply_remote_update_folder,
+            apply_remote_update_workspace
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

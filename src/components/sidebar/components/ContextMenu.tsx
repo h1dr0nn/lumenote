@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, memo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FileText, FolderPlus, Trash2, Edit3, Palette, LayoutGrid } from "lucide-react";
+import { FileText, FolderPlus, Trash2, Edit3, Palette, LayoutGrid, Upload } from "lucide-react";
 import { HexColorPicker } from "react-colorful";
 import { useStore } from "../../../store/useStore";
 import { t } from "../../../utils/i18n";
@@ -11,10 +11,11 @@ interface ContextMenuProps extends ContextMenuType {
     onClose: () => void;
     onRename: (id: string, val: string) => void;
     onExport?: (id: string) => void;
+    onImport?: () => void;
     onInlineCreate?: (id: string, name: string) => void;
 }
 
-export const ContextMenu = memo(({ x, y, type, itemId, onClose, onRename, onExport, onInlineCreate }: ContextMenuProps) => {
+export const ContextMenu = memo(({ x, y, type, itemId, onClose, onRename, onExport, onImport, onInlineCreate }: ContextMenuProps) => {
     const {
         folders, notes, workspaces, deleteNote, deleteFolder, deleteWorkspace,
         addNote, addFolder, addWorkspace, setNoteColor, setFolderColor, setWorkspaceColor, language
@@ -35,10 +36,26 @@ export const ContextMenu = memo(({ x, y, type, itemId, onClose, onRename, onExpo
     useEffect(() => {
         if (ref.current) {
             const rect = ref.current.getBoundingClientRect();
+            const padding = 24; // Padding từ mép cửa sổ
             let nx = x;
             let ny = y;
-            if (x + rect.width > window.innerWidth) nx = window.innerWidth - rect.width - 8;
-            if (y + rect.height > window.innerHeight) ny = window.innerHeight - rect.height - 8;
+            
+            // Kiểm tra và điều chỉnh vị trí ngang
+            if (x + rect.width > window.innerWidth - padding) {
+                nx = window.innerWidth - rect.width - padding;
+            }
+            if (nx < padding) {
+                nx = padding;
+            }
+            
+            // Kiểm tra và điều chỉnh vị trí dọc
+            if (y + rect.height > window.innerHeight - padding) {
+                ny = window.innerHeight - rect.height - padding;
+            }
+            if (ny < padding) {
+                ny = padding;
+            }
+            
             setPos({ x: nx, y: ny });
         }
     }, [x, y, showColorPicker]);
@@ -104,6 +121,7 @@ export const ContextMenu = memo(({ x, y, type, itemId, onClose, onRename, onExpo
         { icon: <Edit3 size={14} />, label: t('rename', language), action: handleRename },
         { icon: <Palette size={14} />, label: t('appearance', language), action: () => setShowColorPicker(!showColorPicker) },
         { icon: <FileText size={14} />, label: t('export_markdown', language), action: () => { if (itemId) onExport?.(itemId); onClose(); } },
+        { icon: <Upload size={14} />, label: t('import_workspace', language), action: () => { onImport?.(); onClose(); } },
         { icon: <Trash2 size={14} />, label: t('delete', language), action: () => { if (itemId) deleteWorkspace(itemId); onClose(); }, danger: true },
     ] : [
         {

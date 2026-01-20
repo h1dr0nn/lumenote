@@ -3,7 +3,7 @@ import { Plus, Search, X, FileText } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useState, useRef, useMemo, useEffect } from "react";
 import { t } from "../../utils/i18n";
-import { open } from "@tauri-apps/plugin-dialog";
+import { save, open } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
 import { api } from "../../utils/api";
 import {
@@ -46,6 +46,7 @@ export const Sidebar = () => {
         activeWorkspaceId,
         workspaces,
         setActiveNoteId,
+        setActiveWorkspaceId,
         addNote,
         addFolder,
         addWorkspace,
@@ -60,6 +61,7 @@ export const Sidebar = () => {
         searchResults,
         searchNotes,
         setSearchResults,
+        initialize,
         language
     } = useStore();
 
@@ -319,22 +321,61 @@ export const Sidebar = () => {
 
     const handleExportWorkspace = async (workspaceId: string) => {
         try {
-            const selected = await open({
-                directory: true,
-                multiple: false,
+            const workspace = workspaces.find(w => w.id === workspaceId);
+            const workspaceName = workspace?.name || "LUMENOTE";
+            const sanitizedName = workspaceName.replace(/[^a-zA-Z0-9\s-_]/g, '').trim() || "LUMENOTE";
+            const defaultFileName = `${sanitizedName}.zip`;
+
+            const selected = await save({
+                defaultPath: defaultFileName,
+                filters: [{
+                    name: 'ZIP Archive',
+                    extensions: ['zip']
+                }],
                 title: t('export', language)
             });
             if (selected) {
-                // selected can be a string or string[] or null
-                const path = Array.isArray(selected) ? selected[0] : selected;
-                if (path) {
-                    await api.exportWorkspace(workspaceId, path);
-                    toast.success(t('export_success', language));
-                }
+                await api.exportWorkspace(workspaceId, selected);
+                toast.success(t('export_success', language));
             }
         } catch (error) {
             console.error("Export failed:", error);
-            toast.error("Export failed");
+            toast.error(t('export_failed', language));
+        }
+    };
+
+    const handleImportWorkspace = async () => {
+        try {
+            const selected = await open({
+                filters: [{
+                    name: 'ZIP Archive',
+                    extensions: ['zip']
+                }],
+                title: t('import_workspace', language),
+                multiple: false
+            });
+
+            if (!selected || typeof selected !== 'string') {
+                return;
+            }
+
+            const zipPath = selected;
+            
+            // Extract workspace name from ZIP filename (without .zip extension)
+            const zipFileName = zipPath.split(/[/\\]/).pop() || 'Imported Workspace';
+            const workspaceName = zipFileName.replace(/\.zip$/i, '') || 'Imported Workspace';
+            
+            const workspaceId = await api.importWorkspace(zipPath, workspaceName);
+            
+            // Refresh data and switch to imported workspace
+            await initialize();
+            setActiveWorkspaceId(workspaceId);
+            
+            toast.success(t('import_success', language));
+        } catch (error: any) {
+            console.error("Import failed:", error);
+            const errorMessage = error?.message || String(error);
+            toast.error(t('import_failed', language) + ': ' + errorMessage);
         }
     };
 
@@ -577,6 +618,7 @@ export const Sidebar = () => {
                         onClose={() => setContextMenu(null)}
                         onRename={(id: string, val: string) => handleRenameStart(id, val)}
                         onExport={handleExportWorkspace}
+                        onImport={handleImportWorkspace}
                         onInlineCreate={(id: string, name: string) => setTimeout(() => handleRenameStart(id, name), 0)}
                     />
                 )}
